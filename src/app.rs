@@ -72,7 +72,7 @@ async fn setup<App: Application>(title: &str) -> Setup {
         .await
         .unwrap();
 
-    let optional_features = wgpu::Features::empty();
+    let optional_features = wgpu::Features::NON_FILL_POLYGON_MODE;
     let required_features = wgpu::Features::empty();
     let adapter_features = adapter.features();
     assert!(

@@ -4,12 +4,16 @@ out gl_PerVertex {
     vec4 gl_Position;
 };
 
-const vec2 positions[3] = vec2[3](
-    vec2(0.0, -0.5),
-    vec2(0.5, 0.5),
-    vec2(-0.5, 0.5)
-);
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec3 color;
+layout(location = 0) out vec3 fragColor;
+
+
+layout(set = 0, binding = 0) uniform Transforms {
+    mat4 transformMatrix;
+};
 
 void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+    gl_Position = transformMatrix * vec4(pos, 1.0);
+    fragColor = color;
 }
