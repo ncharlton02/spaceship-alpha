@@ -1,5 +1,5 @@
-use cgmath::{prelude::*, Point2, Point3, Vector3};
-use graphics::{Camera, Mesh, Renderer, Vertex};
+use cgmath::{prelude::*, Matrix4, Point2, Point3, Vector3};
+use graphics::{Camera, Mesh, MeshId, Renderer, Vertex};
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = false;
@@ -7,72 +7,16 @@ pub const WIREFRAME_MODE: bool = false;
 mod app;
 mod graphics;
 
-pub fn create_vertices() -> Vec<Vertex> {
-    let red: Point3<f32> = (1.0, 0.0, 0.0).into();
-    let blue: Point3<f32> = (0.0, 0.0, 1.0).into();
-    let green: Point3<f32> = (0.0, 1.0, 0.0).into();
-    let white: Point3<f32> = (1.0, 1.0, 1.0).into();
-    let yellow: Point3<f32> = (1.0, 1.0, 0.0).into();
-    let light_blue: Point3<f32> = (0.0, 1.0, 1.0).into();
-
-    vec![
-        // Bottom
-        Vertex::new(-0.5, 0.5, 0.0, red),
-        Vertex::new(-0.5, -0.5, 0.0, red),
-        Vertex::new(0.5, -0.5, 0.0, red),
-        Vertex::new(0.5, 0.5, 0.0, red),
-        // Top
-        Vertex::new(-0.5, 0.5, 1.0, blue),
-        Vertex::new(-0.5, -0.5, 1.0, blue),
-        Vertex::new(0.5, -0.5, 1.0, blue),
-        Vertex::new(0.5, 0.5, 1.0, blue),
-        // Left
-        Vertex::new(-0.5, 0.5, 1.0, green),
-        Vertex::new(-0.5, 0.5, 0.0, green),
-        Vertex::new(-0.5, -0.5, 0.0, green),
-        Vertex::new(-0.5, -0.5, 1.0, green),
-        //Right
-        Vertex::new(0.5, 0.5, 1.0, white),
-        Vertex::new(0.5, 0.5, 0.0, white),
-        Vertex::new(0.5, -0.5, 0.0, white),
-        Vertex::new(0.5, -0.5, 1.0, white),
-        //Front
-        Vertex::new(0.5, 0.5, 1.0, yellow),
-        Vertex::new(0.5, 0.5, 0.0, yellow),
-        Vertex::new(-0.5, 0.5, 0.0, yellow),
-        Vertex::new(-0.5, 0.5, 1.0, yellow),
-        //Back
-        Vertex::new(0.5, -0.5, 1.0, light_blue),
-        Vertex::new(0.5, -0.5, 0.0, light_blue),
-        Vertex::new(-0.5, -0.5, 0.0, light_blue),
-        Vertex::new(-0.5, -0.5, 1.0, light_blue),
-    ]
-}
-
-#[rustfmt::skip]
-pub fn create_indices() -> Vec<u16>{
-    vec![
-        0, 1, 2, 0, 2, 3, //Bottom
-        4, 5, 6, 4, 6, 7, //Top
-        8, 9, 10, 8, 10, 11, //Left
-        14, 13, 12, 15, 14, 12, //Right
-        16, 17, 18, 16, 18, 19, //Front
-        22, 21, 20, 23, 22, 20 //Back
-    ]
-}
-
 struct AppState {
     renderer: Renderer,
     camera: Camera,
 }
 
 impl app::Application for AppState {
-    fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, _: &wgpu::Queue) -> Self {
-        let mesh = Mesh {
-            vertices: create_vertices(),
-            indices: create_indices(),
-        };
-        let renderer = Renderer::new(device, &swapchain.format, &mesh);
+    fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        let mesh = Mesh::rectangular_prism(0.5, 0.5, 2.0, Point3::new(0.8, 0.8, 0.8));
+        let mut renderer = Renderer::new(device, &swapchain.format);
+        let mesh_id = renderer.mesh_registry().add(device, &mesh);
         let camera = Camera {
             eye: (3.0, 3.0, 3.0).into(),
             target: Point3::origin(),
@@ -82,6 +26,11 @@ impl app::Application for AppState {
             near: 0.1,
             far: 100.0,
         };
+
+        let model1 = Matrix4::identity();
+        let model2 = Matrix4::from_translation((1.0, 0.0, 0.0).into());
+
+        renderer.mesh_registry().write_models(queue, mesh_id, &vec![model1, model2]);
 
         AppState { renderer, camera }
     }
