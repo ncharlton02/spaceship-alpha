@@ -1,5 +1,5 @@
-use cgmath::{prelude::*, Matrix4, Point2, Point3, Vector3};
-use graphics::{Camera, Mesh, MeshId, Renderer, Vertex};
+use cgmath::{prelude::*, Point2, Point3, Vector3};
+use graphics::{Camera, Mesh, MeshId, Model, ModelId, ModelUpdates, Renderer};
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = false;
@@ -10,13 +10,14 @@ mod graphics;
 struct AppState {
     renderer: Renderer,
     camera: Camera,
+    angle: f32,
+    mesh_id: MeshId,
+    model_id: ModelId,
 }
 
 impl app::Application for AppState {
-    fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        let mesh = Mesh::rectangular_prism(0.5, 0.5, 2.0, Point3::new(0.8, 0.8, 0.8));
+    fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, _: &wgpu::Queue) -> Self {
         let mut renderer = Renderer::new(device, &swapchain.format);
-        let mesh_id = renderer.mesh_registry().add(device, &mesh);
         let camera = Camera {
             eye: (3.0, 3.0, 3.0).into(),
             target: Point3::origin(),
@@ -27,12 +28,19 @@ impl app::Application for AppState {
             far: 100.0,
         };
 
-        let model1 = Matrix4::identity();
-        let model2 = Matrix4::from_translation((1.0, 0.0, 0.0).into());
+        let mesh = Mesh::rectangular_prism(0.5, 0.5, 2.0, Point3::new(0.8, 0.8, 0.8));
+        let mesh_id = renderer.mesh_manager().add(device, &mesh);
+        let model_id = renderer
+            .mesh_manager()
+            .new_model(mesh_id, &Model::new((0.0, 0.0, 0.0).into(), 0.0));
 
-        renderer.mesh_registry().write_models(queue, mesh_id, &vec![model1, model2]);
-
-        AppState { renderer, camera }
+        AppState {
+            renderer,
+            camera,
+            model_id,
+            mesh_id,
+            angle: 0.0,
+        }
     }
 
     fn resize(&mut self, swapchain: &wgpu::SwapChainDescriptor, _: &wgpu::Device, _: &wgpu::Queue) {
@@ -53,9 +61,12 @@ impl app::Application for AppState {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) {
-        let rotation = cgmath::Quaternion::from_angle_z(cgmath::Rad(0.02));
+        let model_updates = ModelUpdates::new();
+        let model = Model::new((0.0, 0.0, 0.0).into(), self.angle);
+        model_updates.update(self.mesh_id, self.model_id, &model);
+        self.renderer.mesh_manager().update_models(model_updates);
+        self.angle += 0.01;
 
-        self.camera.eye = rotation.rotate_point(self.camera.eye);
         self.renderer.render(device, queue, texture, &self.camera)
     }
 }

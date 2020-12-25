@@ -1,5 +1,6 @@
-use cgmath::{Matrix4, Point3, Vector3};
-use std::mem;
+use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
+use generational_arena::Arena;
+use std::{cell::RefCell, mem};
 use wgpu::util::DeviceExt;
 
 pub struct Mesh {
@@ -9,38 +10,43 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn rectangular_prism(x: f32, y: f32, z: f32, color: Point3<f32>) -> Mesh {
+    /// Creates a rectangular prism centered at (0, 0, 0)
+    pub fn rectangular_prism(mut x: f32, mut y: f32, mut z: f32, color: Point3<f32>) -> Mesh {
+        x /= 2.0;
+        y /= 2.0;
+        z /= 2.0;
+
         let vertices = vec![
             // Bottom
-            Vertex::new(0.0, y, 0.0, Point3::new(0.0, 0.0, -1.0), color),
-            Vertex::new(0.0, 0.0, 0.0, Point3::new(0.0, 0.0, -1.0), color),
-            Vertex::new(x, 0.0, 0.0, Point3::new(0.0, 0.0, -1.0), color),
-            Vertex::new(x, y, 0.0, Point3::new(0.0, 0.0, -1.0), color),
+            Vertex::new(-x, y, -z, Point3::new(0.0, 0.0, -1.0), color),
+            Vertex::new(-x, -y, -z, Point3::new(0.0, 0.0, -1.0), color),
+            Vertex::new(x, -y, -z, Point3::new(0.0, 0.0, -1.0), color),
+            Vertex::new(x, y, -z, Point3::new(0.0, 0.0, -1.0), color),
             // Top
-            Vertex::new(0.0, y, z, Point3::new(0.0, 0.0, 1.0), color),
-            Vertex::new(0.0, 0.0, z, Point3::new(0.0, 0.0, 1.0), color),
-            Vertex::new(x, 0.0, z, Point3::new(0.0, 0.0, 1.0), color),
+            Vertex::new(-x, y, z, Point3::new(0.0, 0.0, 1.0), color),
+            Vertex::new(-x, -y, z, Point3::new(0.0, 0.0, 1.0), color),
+            Vertex::new(x, -y, z, Point3::new(0.0, 0.0, 1.0), color),
             Vertex::new(x, y, z, Point3::new(0.0, 0.0, 1.0), color),
             // Left
-            Vertex::new(0.0, y, z, Point3::new(0.0, -1.0, 0.0), color),
-            Vertex::new(0.0, y, 0.0, Point3::new(0.0, -1.0, 0.0), color),
-            Vertex::new(0.0, 0.0, 0.0, Point3::new(0.0, -1.0, 0.0), color),
-            Vertex::new(0.0, 0.0, z, Point3::new(0.0, -1.0, 0.0), color),
+            Vertex::new(-x, y, z, Point3::new(-1.0, 0.0, 0.0), color),
+            Vertex::new(-x, y, -z, Point3::new(-1.0, 0.0, 0.0), color),
+            Vertex::new(-x, -y, -z, Point3::new(-1.0, 0.0, 0.0), color),
+            Vertex::new(-x, -y, z, Point3::new(-1.0, 0.0, 0.0), color),
             //Right
-            Vertex::new(x, y, z, Point3::new(0.0, 1.0, 0.0), color),
-            Vertex::new(x, y, 0.0, Point3::new(0.0, 1.0, 0.0), color),
-            Vertex::new(x, 0.0, 0.0, Point3::new(0.0, 1.0, 0.0), color),
-            Vertex::new(x, 0.0, z, Point3::new(0.0, 1.0, 0.0), color),
-            //Front
             Vertex::new(x, y, z, Point3::new(1.0, 0.0, 0.0), color),
-            Vertex::new(x, y, 0.0, Point3::new(1.0, 0.0, 0.0), color),
-            Vertex::new(0.0, y, 0.0, Point3::new(1.0, 0.0, 0.0), color),
-            Vertex::new(0.0, y, z, Point3::new(1.0, 0.0, 0.0), color),
+            Vertex::new(x, y, -z, Point3::new(1.0, 0.0, 0.0), color),
+            Vertex::new(x, -y, -z, Point3::new(1.0, 0.0, 0.0), color),
+            Vertex::new(x, -y, z, Point3::new(1.0, 0.0, 0.0), color),
+            //Front
+            Vertex::new(x, y, z, Point3::new(0.0, 1.0, 0.0), color),
+            Vertex::new(x, y, -z, Point3::new(0.0, 1.0, 0.0), color),
+            Vertex::new(-x, y, -z, Point3::new(0.0, 1.0, 0.0), color),
+            Vertex::new(-x, y, z, Point3::new(0.0, 1.0, 0.0), color),
             //Back
-            Vertex::new(x, 0.0, z, Point3::new(-1.0, 0.0, 0.0), color),
-            Vertex::new(x, 0.0, 0.0, Point3::new(-1.0, 0.0, 0.0), color),
-            Vertex::new(0.0, 0.0, 0.0, Point3::new(-1.0, 0.0, 0.0), color),
-            Vertex::new(0.0, 0.0, z, Point3::new(-1.0, 0.0, 0.0), color),
+            Vertex::new(x, -y, z, Point3::new(0.0, -1.0, 0.0), color),
+            Vertex::new(x, -y, -z, Point3::new(0.0, -1.0, 0.0), color),
+            Vertex::new(-x, -y, -z, Point3::new(0.0, -1.0, 0.0), color),
+            Vertex::new(-x, -y, z, Point3::new(0.0, -1.0, 0.0), color),
         ];
 
         #[rustfmt::skip]
@@ -89,31 +95,110 @@ struct ModelMatrix(Matrix4<f32>);
 unsafe impl bytemuck::Pod for ModelMatrix {}
 unsafe impl bytemuck::Zeroable for ModelMatrix {}
 
+#[derive(Clone, Copy)]
 pub struct MeshId(usize);
 
-pub struct MeshRegistry {
-    meshes: Vec<GPUMesh>,
+pub type ModelId = generational_arena::Index;
+
+pub struct Model {
+    pub position: Vector3<f32>,
+    pub rotation: Quaternion<f32>,
 }
 
-impl MeshRegistry {
+impl Model {
+    pub fn new(position: Vector3<f32>, angle_z: f32) -> Self {
+        Self {
+            position,
+            rotation: Quaternion::from_axis_angle(Vector3::unit_z(), cgmath::Rad(angle_z)),
+        }
+    }
+}
+
+impl Model {
+    fn as_matrix(&self) -> Matrix4<f32> {
+        Matrix4::from(self.rotation) * Matrix4::from_translation(self.position)
+    }
+}
+
+struct ModelUpdate {
+    mesh: MeshId,
+    model_id: ModelId,
+    matrix: Matrix4<f32>,
+}
+
+/// Used to publish model updates
+pub struct ModelUpdates {
+    updates: RefCell<Vec<ModelUpdate>>,
+}
+
+impl ModelUpdates {
+    pub fn new() -> ModelUpdates {
+        Self {
+            updates: RefCell::new(Vec::new()),
+        }
+    }
+
+    pub fn update(&self, mesh: MeshId, model_id: ModelId, model: &Model) {
+        self.updates.borrow_mut().push(ModelUpdate {
+            mesh,
+            model_id,
+            matrix: model.as_matrix(),
+        });
+    }
+}
+
+pub struct MeshManager {
+    meshes: Vec<GPUMesh>,
+    models: Vec<Arena<Matrix4<f32>>>,
+}
+
+impl MeshManager {
     pub fn add(&mut self, device: &wgpu::Device, mesh: &Mesh) -> MeshId {
         let id = self.meshes.len();
         let gpu_mesh = GPUMesh::create(device, mesh, id);
         self.meshes.push(gpu_mesh);
+        self.models.push(Arena::new());
 
         println!("[Registered Mesh] {}={}", &mesh.name, id);
 
         MeshId(id)
     }
 
-    /// Note: queue.submit() needs to be called after this for the changes to take affect
-    pub fn write_models(&mut self, queue: &wgpu::Queue, mesh: MeshId, models: &[Matrix4<f32>]){
-        //We need to place the matrices in a struct that we can mark as Pod / Zeroable
-        let models: Vec<ModelMatrix> = models.iter().map(|matrix| ModelMatrix(*matrix)).collect();
-        let mesh = self.meshes.get_mut(mesh.0).unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh.0));
-        mesh.instances = models.len() as u32;
-    
-        queue.write_buffer(&mesh.models_buffer, 0, bytemuck::cast_slice(&models));
+    pub fn new_model(&mut self, mesh: MeshId, model: &Model) -> ModelId {
+        let arena = self
+            .models
+            .get_mut(mesh.0)
+            .unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh.0));
+        arena.insert(model.as_matrix())
+    }
+
+    /// Updates the mesh manager with these updates. Will be pushed to the GPU during the next render
+    pub fn update_models(&mut self, updates: ModelUpdates) {
+        let updates = updates.updates.into_inner();
+
+        for update in updates {
+            let arena = self
+                .models
+                .get_mut(update.mesh.0)
+                .unwrap_or_else(|| panic!("Invalid mesh ID: {}", update.mesh.0));
+            (*arena.get_mut(update.model_id).unwrap()) = update.matrix;
+        }
+    }
+
+    fn update_gpu_meshes(&mut self, queue: &wgpu::Queue) {
+        for (index, mesh) in &mut self.meshes.iter_mut().enumerate() {
+            let models = self
+                .models
+                .get(index)
+                .unwrap_or_else(|| panic!("Invalid mesh ID: {}", index));
+            //We need to place the matrices in a struct that we can mark as Pod / Zeroable
+            let models: Vec<ModelMatrix> = models
+                .iter()
+                .map(|arena_entry| ModelMatrix(*arena_entry.1))
+                .collect();
+            mesh.instances = models.len() as u32;
+            queue.write_buffer(&mesh.models_buffer, 0, bytemuck::cast_slice(&models));
+        }
     }
 }
 
@@ -160,12 +245,15 @@ pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     camera_bg: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
-    mesh_registry: MeshRegistry,
+    mesh_manager: MeshManager,
 }
 
 impl Renderer {
     pub fn new(device: &wgpu::Device, swapchain_format: &wgpu::TextureFormat) -> Renderer {
-        let mesh_registry = MeshRegistry { meshes: Vec::new() };
+        let mesh_manager = MeshManager {
+            meshes: Vec::new(),
+            models: Vec::new(),
+        };
         let camera_buffer_size = 16 * mem::size_of::<f32>() as u64;
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -264,7 +352,7 @@ impl Renderer {
             pipeline,
             camera_bg,
             camera_buffer,
-            mesh_registry,
+            mesh_manager,
         }
     }
 
@@ -275,6 +363,7 @@ impl Renderer {
         frame: &wgpu::SwapChainTexture,
         camera: &Camera,
     ) {
+        self.mesh_manager.update_gpu_meshes(queue);
         queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -303,7 +392,7 @@ impl Renderer {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.camera_bg, &[]);
 
-        for mesh in &self.mesh_registry.meshes {
+        for mesh in &self.mesh_manager.meshes {
             rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             rpass.set_vertex_buffer(1, mesh.models_buffer.slice(..));
             rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -314,8 +403,8 @@ impl Renderer {
         queue.submit(Some(encoder.finish()));
     }
 
-    pub fn mesh_registry(&mut self) -> &mut MeshRegistry {
-        &mut self.mesh_registry
+    pub fn mesh_manager(&mut self) -> &mut MeshManager {
+        &mut self.mesh_manager
     }
 }
 

@@ -19,15 +19,16 @@ layout(location = 2) out vec3 fNormal;
 
 
 layout(set = 0, binding = 0) uniform Transforms {
-    mat4 transformMatrix;
+    mat4 viewProjMatrix;
 };
 
 void main() {
-    mat4 model = mat4(model0, model1, model2, model3);
-    vec4 position = model * vec4(pos, 1.0);
-    gl_Position = transformMatrix * position;
+    mat4 modelMatrix = mat4(model0, model1, model2, model3);
+    mat3 normalMatrix = mat3(transpose(inverse(modelMatrix)));
+    vec4 position = modelMatrix * vec4(pos, 1.0);
     
+    gl_Position = viewProjMatrix * position;
     fragColor = color;
-    fPosition = pos;
-    fNormal = normal;
+    fPosition = vec3(position);
+    fNormal = normalMatrix * normal;
 }

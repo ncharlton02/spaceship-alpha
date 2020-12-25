@@ -6,13 +6,13 @@ layout(location = 2) in vec3 normal;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    float ambient = 0.1;
-    vec3 lightPos = vec3(-10.0, -10.0, 10.0);
+    float ambientStrength = 0.25;
+    vec3 lightPos = vec3(3.0, 3.0, 3.0);
 
     vec3 normal = normalize(normal);
-    vec3 light_dir = normalize(lightPos - position);
-    float diffuse_strength = max(dot(normal, light_dir), 0.0);
+    vec3 lightDirection = normalize(lightPos - position);
+    float diffuseStrength = max(dot(normal, lightDirection), 0.0);
 
-    vec3 color = inColor * (diffuse_strength + ambient);
+    vec3 color = inColor * clamp(diffuseStrength + ambientStrength, 0.4, 1.0);
     outColor = vec4(color, 1.0);
 }

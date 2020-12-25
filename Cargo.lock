@@ -606,6 +606,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "generational-arena"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1d3b771574f62d0548cee0ad9057857e9fc25d7a3335f140c84f6acd0bf601"
+dependencies = [
+ "cfg-if 0.1.10",
+]
+
+[[package]]
 name = "gfx-auxil"
 version = "0.5.0"
 source = "git+https://github.com/gfx-rs/gfx?rev=0244e3401e9f127617cb8636397048584e7bfe8a#0244e3401e9f127617cb8636397048584e7bfe8a"
@@ -1619,6 +1628,7 @@ dependencies = [
  "bytemuck",
  "cgmath",
  "futures",
+ "generational-arena",
  "specs",
  "wgpu",
  "winit",
