@@ -32,6 +32,8 @@ pub trait Application: 'static + Sized {
         pos: Point2<f32>,
     );
 
+    fn fixed_update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
+
     fn render(
         &mut self,
         frame: &wgpu::SwapChainTexture,
@@ -146,9 +148,10 @@ fn start<App: Application>(
         match event {
             event::Event::MainEventsCleared => {
                 if last_update_inst.elapsed() > Duration::from_nanos(1_000_000_000 / fps) {
-                    window.request_redraw();
+                    app.fixed_update(&device, &queue);
                     last_update_inst = Instant::now();
                 }
+                window.request_redraw();
 
                 pool.run_until_stalled();
             }

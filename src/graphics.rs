@@ -246,10 +246,13 @@ pub struct Renderer {
     camera_bg: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     mesh_manager: MeshManager,
+    depth_texture: GPUTexture,
 }
 
 impl Renderer {
-    pub fn new(device: &wgpu::Device, swapchain_format: &wgpu::TextureFormat) -> Renderer {
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    pub fn new(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) -> Renderer {
         let mesh_manager = MeshManager {
             meshes: Vec::new(),
             models: Vec::new(),
@@ -293,6 +296,7 @@ impl Renderer {
             device.create_shader_module(&wgpu::include_spirv!("shaders/basic.vert.spv"));
         let frag_shader =
             device.create_shader_module(&wgpu::include_spirv!("shaders/basic.frag.spv"));
+        let depth_texture = create_depth_texture(device, swapchain);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
@@ -323,12 +327,17 @@ impl Renderer {
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &[wgpu::ColorStateDescriptor {
-                format: *swapchain_format,
+                format: swapchain.format,
                 color_blend: wgpu::BlendDescriptor::default(),
                 alpha_blend: wgpu::BlendDescriptor::default(),
                 write_mask: wgpu::ColorWrite::ALL,
             }],
-            depth_stencil_state: None,
+            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                format: Renderer::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilStateDescriptor::default(),
+            }),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: Some(wgpu::IndexFormat::Uint16),
                 vertex_buffers: &[
@@ -353,6 +362,7 @@ impl Renderer {
             camera_bg,
             camera_buffer,
             mesh_manager,
+            depth_texture,
         }
     }
 
@@ -387,7 +397,14 @@ impl Renderer {
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                attachment: &self.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
         });
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.camera_bg, &[]);
@@ -403,8 +420,56 @@ impl Renderer {
         queue.submit(Some(encoder.finish()));
     }
 
+    pub fn resize(&mut self, device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) {
+        self.depth_texture = create_depth_texture(device, swapchain);
+    }
+
     pub fn mesh_manager(&mut self) -> &mut MeshManager {
         &mut self.mesh_manager
+    }
+}
+
+struct GPUTexture {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+}
+
+fn create_depth_texture(
+    device: &wgpu::Device,
+    swapchain: &wgpu::SwapChainDescriptor,
+) -> GPUTexture {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Depth Texture"),
+        size: wgpu::Extent3d {
+            width: swapchain.width,
+            height: swapchain.height,
+            depth: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: Renderer::DEPTH_FORMAT,
+        usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        compare: Some(wgpu::CompareFunction::LessEqual),
+        lod_min_clamp: -100.0,
+        lod_max_clamp: 100.0,
+        ..Default::default()
+    });
+
+    GPUTexture {
+        texture,
+        view,
+        sampler,
     }
 }
 
@@ -432,6 +497,10 @@ impl Camera {
         0.0, 0.0, 0.5, 0.0,
         0.0, 0.0, 0.5, 1.0,
     );
+
+    pub fn resize(&mut self, swapchain: &wgpu::SwapChainDescriptor) {
+        self.aspect = swapchain.width as f32 / swapchain.height as f32;
+    }
 
     fn build_view_projection_matrix(&self) -> CameraMatrix {
         let view = Matrix4::look_at(self.eye, self.target, self.up);
