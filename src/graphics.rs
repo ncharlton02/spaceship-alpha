@@ -476,9 +476,9 @@ unsafe impl bytemuck::Pod for CameraMatrix {}
 unsafe impl bytemuck::Zeroable for CameraMatrix {}
 
 pub struct Camera {
-    pub eye: Point3<f32>,
-    pub target: Point3<f32>,
-    pub up: Vector3<f32>,
+    pub position: Point3<f32>,
+    pub yaw: f32,
+    pub pitch: f32,
     pub aspect: f32,
     pub fov: f32,
     pub near: f32,
@@ -499,7 +499,11 @@ impl Camera {
     }
 
     fn build_view_projection_matrix(&self) -> CameraMatrix {
-        let view = Matrix4::look_at(self.eye, self.target, self.up);
+        let view = Matrix4::look_at_dir(
+            self.position,
+            Vector3::new(self.yaw.cos(), self.yaw.sin(), self.pitch.sin()).normalize(),
+            Vector3::unit_z(),
+        );
         let proj = cgmath::perspective(cgmath::Deg(self.fov), self.aspect, self.near, self.far);
 
         CameraMatrix(Self::OPENGL_TO_WGPU_MATRIX * proj * view)
