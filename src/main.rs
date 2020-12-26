@@ -1,15 +1,19 @@
 use cgmath::{prelude::*, Point2, Point3, Vector3};
+use entity::ModelComp;
 use graphics::{Camera, Mesh, MeshId, Model, ModelId, ModelUpdates, Renderer};
+use specs::{Builder, Component, Dispatcher, World, WorldExt};
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = true;
 
 mod app;
+mod entity;
 mod graphics;
 
 struct AppState {
     renderer: Renderer,
     camera: Camera,
+    world: World,
 }
 
 impl app::Application for AppState {
@@ -27,16 +31,24 @@ impl app::Application for AppState {
 
         let mesh = Mesh::rectangular_prism(0.5, 0.5, 2.0, Point3::new(0.8, 0.8, 0.8));
         let mesh_id = renderer.mesh_manager().add(device, &mesh);
-        renderer
-            .mesh_manager()
-            .new_model(mesh_id, &Model::new((0.0, 0.0, 0.0).into(), 0.0));
-        let mesh2 = Mesh::rectangular_prism(0.5, 0.5, 1.0, Point3::new(1.0, 0.4, 0.4));
-        let mesh_id2 = renderer.mesh_manager().add(device, &mesh2);
-        renderer
-            .mesh_manager()
-            .new_model(mesh_id2, &Model::new((1.5, 0.0, 0.0).into(), 0.0));
+        let model = Model::new((0.0, 0.0, 0.0).into(), 0.0);
+        let model_id = renderer.mesh_manager().new_model(mesh_id, &model);
 
-        AppState { renderer, camera }
+        let mut world = entity::initialize_ecs();
+        world
+            .create_entity()
+            .with(ModelComp {
+                mesh_id,
+                model,
+                model_id,
+            })
+            .build();
+
+        AppState {
+            renderer,
+            camera,
+            world,
+        }
     }
 
     fn resize(
@@ -62,6 +74,11 @@ impl app::Application for AppState {
 
         let rotation = Quaternion::from_axis_angle(Vector3::unit_z(), cgmath::Rad(0.04));
         self.camera.eye = rotation.rotate_point(self.camera.eye);
+
+        self.world.insert(ModelUpdates::default());
+        entity::update_ecs(&mut self.world);
+        let model_updates = self.world.remove::<ModelUpdates>().unwrap();
+        self.renderer.mesh_manager().update_models(model_updates);
     }
 
     fn render(

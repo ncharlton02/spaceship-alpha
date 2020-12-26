@@ -1,6 +1,6 @@
 use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
 use generational_arena::Arena;
-use std::{cell::RefCell, mem};
+use std::{borrow::BorrowMut, mem, sync::Mutex};
 use wgpu::util::DeviceExt;
 
 pub struct Mesh {
@@ -127,19 +127,15 @@ struct ModelUpdate {
 }
 
 /// Used to publish model updates
+#[derive(Default)]
 pub struct ModelUpdates {
-    updates: RefCell<Vec<ModelUpdate>>,
+    updates: Mutex<Vec<ModelUpdate>>,
 }
 
 impl ModelUpdates {
-    pub fn new() -> ModelUpdates {
-        Self {
-            updates: RefCell::new(Vec::new()),
-        }
-    }
-
     pub fn update(&self, mesh: MeshId, model_id: ModelId, model: &Model) {
-        self.updates.borrow_mut().push(ModelUpdate {
+        let mut updates = self.updates.lock().expect("Lock poisoned!");
+        updates.borrow_mut().push(ModelUpdate {
             mesh,
             model_id,
             matrix: model.as_matrix(),
@@ -174,7 +170,7 @@ impl MeshManager {
 
     /// Updates the mesh manager with these updates. Will be pushed to the GPU during the next render
     pub fn update_models(&mut self, updates: ModelUpdates) {
-        let updates = updates.updates.into_inner();
+        let updates = updates.updates.into_inner().expect("Lock was poisoned");
 
         for update in updates {
             let arena = self
