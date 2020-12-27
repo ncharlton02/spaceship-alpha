@@ -1,24 +1,24 @@
-use cgmath::{prelude::*, Point2, Point3, Vector3};
-use entity::ModelComp;
-use graphics::{Camera, Mesh, Model, ModelUpdates, Renderer};
-use specs::{Builder, World, WorldExt};
-use std::{collections::HashSet};
+use cgmath::{prelude::*, Point2, Vector3};
+use entity::ECS;
+use graphics::{Camera, MeshManager, Renderer};
+use std::collections::HashSet;
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = true;
 
 mod app;
+mod block;
 mod entity;
 mod graphics;
 
-struct AppState {
+struct AppState<'a: 'static> {
     renderer: Renderer,
     camera: Camera,
-    world: World,
+    ecs: entity::ECS<'a>,
     keys: Keys,
 }
 
-impl AppState {
+impl AppState<'_> {
     fn update_camera(&mut self) {
         let rotate_speed = 0.01;
         let move_speed = 0.04;
@@ -51,9 +51,11 @@ impl AppState {
     }
 }
 
-impl app::Application for AppState {
+impl<'a> app::Application for AppState<'a> {
     fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, _: &wgpu::Queue) -> Self {
-        let mut renderer = Renderer::new(device, &swapchain);
+        let mut mesh_manager = MeshManager::new();
+        let renderer = Renderer::new(device, &swapchain);
+        let blocks = block::load_blocks(device, &mut mesh_manager);
         let camera = Camera {
             position: (-3.0, 0.0, 3.0).into(),
             yaw: 0.0,
@@ -64,27 +66,13 @@ impl app::Application for AppState {
             far: 100.0,
         };
 
-        let mesh = Mesh::rectangular_prism(0.5, 0.5, 2.0, Point3::new(0.8, 0.8, 0.8));
-        let mesh_id = renderer.mesh_manager().add(device, &mesh);
-        let model = Model::new((0.0, 0.0, 0.0).into(), 0.0);
-        let model_id = renderer.mesh_manager().new_model(mesh_id, &model);
-
-        let mut world = entity::initialize_ecs();
-        world
-            .create_entity()
-            .with(ModelComp {
-                mesh_id,
-                model,
-                model_id,
-            })
-            .build();
-
+        let ecs = ECS::new(mesh_manager, blocks);
         let keys = Keys(HashSet::new());
 
         AppState {
             renderer,
             camera,
-            world,
+            ecs,
             keys,
         }
     }
@@ -114,11 +102,7 @@ impl app::Application for AppState {
 
     fn fixed_update(&mut self, _: &wgpu::Device, _: &wgpu::Queue) {
         self.update_camera();
-
-        self.world.insert(ModelUpdates::default());
-        entity::update_ecs(&mut self.world);
-        let model_updates = self.world.remove::<ModelUpdates>().unwrap();
-        self.renderer.mesh_manager().update_models(model_updates);
+        self.ecs.update();
     }
 
     fn render(
@@ -127,7 +111,9 @@ impl app::Application for AppState {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) {
-        self.renderer.render(device, queue, texture, &self.camera)
+        let mut mesh_manager = self.ecs.world.fetch_mut::<MeshManager>();
+        self.renderer
+            .render(device, queue, texture, &self.camera, &mut mesh_manager)
     }
 }
 

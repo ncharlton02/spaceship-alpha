@@ -1,6 +1,6 @@
 use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
 use generational_arena::Arena;
-use std::{borrow::BorrowMut, mem, sync::Mutex};
+use std::mem;
 use wgpu::util::DeviceExt;
 
 pub struct Mesh {
@@ -120,35 +120,19 @@ impl Model {
     }
 }
 
-struct ModelUpdate {
-    mesh: MeshId,
-    model_id: ModelId,
-    matrix: Matrix4<f32>,
-}
-
-/// Used to publish model updates
-#[derive(Default)]
-pub struct ModelUpdates {
-    updates: Mutex<Vec<ModelUpdate>>,
-}
-
-impl ModelUpdates {
-    pub fn update(&self, mesh: MeshId, model_id: ModelId, model: &Model) {
-        let mut updates = self.updates.lock().expect("Lock poisoned!");
-        updates.borrow_mut().push(ModelUpdate {
-            mesh,
-            model_id,
-            matrix: model.as_matrix(),
-        });
-    }
-}
-
 pub struct MeshManager {
     meshes: Vec<GPUMesh>,
     models: Vec<Arena<Matrix4<f32>>>,
 }
 
 impl MeshManager {
+    pub fn new() -> MeshManager {
+        MeshManager {
+            meshes: Vec::new(),
+            models: Vec::new(),
+        }
+    }
+
     pub fn add(&mut self, device: &wgpu::Device, mesh: &Mesh) -> MeshId {
         let id = self.meshes.len();
         let gpu_mesh = GPUMesh::create(device, mesh, id);
@@ -169,19 +153,15 @@ impl MeshManager {
     }
 
     /// Updates the mesh manager with these updates. Will be pushed to the GPU during the next render
-    pub fn update_models(&mut self, updates: ModelUpdates) {
-        let updates = updates.updates.into_inner().expect("Lock was poisoned");
-
-        for update in updates {
-            let arena = self
-                .models
-                .get_mut(update.mesh.0)
-                .unwrap_or_else(|| panic!("Invalid mesh ID: {}", update.mesh.0));
-            (*arena.get_mut(update.model_id).unwrap()) = update.matrix;
-        }
+    pub fn update_model(&mut self, mesh_id: MeshId, model_id: ModelId, model: &Model) {
+        let arena = self
+            .models
+            .get_mut(mesh_id.0)
+            .unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh_id.0));
+        (*arena.get_mut(model_id).unwrap()) = model.as_matrix();
     }
 
-    fn update_gpu_meshes(&mut self, queue: &wgpu::Queue) {
+    fn push_meshes_to_gpu(&mut self, queue: &wgpu::Queue) {
         for (index, mesh) in &mut self.meshes.iter_mut().enumerate() {
             let models = self
                 .models
@@ -241,7 +221,6 @@ pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     camera_bg: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
-    mesh_manager: MeshManager,
     depth_texture: GPUTexture,
 }
 
@@ -249,10 +228,6 @@ impl Renderer {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn new(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) -> Renderer {
-        let mesh_manager = MeshManager {
-            meshes: Vec::new(),
-            models: Vec::new(),
-        };
         let camera_buffer_size = 16 * mem::size_of::<f32>() as u64;
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -357,7 +332,6 @@ impl Renderer {
             pipeline,
             camera_bg,
             camera_buffer,
-            mesh_manager,
             depth_texture,
         }
     }
@@ -368,8 +342,9 @@ impl Renderer {
         queue: &wgpu::Queue,
         frame: &wgpu::SwapChainTexture,
         camera: &Camera,
+        mesh_manager: &mut MeshManager,
     ) {
-        self.mesh_manager.update_gpu_meshes(queue);
+        mesh_manager.push_meshes_to_gpu(queue);
         queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -405,7 +380,7 @@ impl Renderer {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.camera_bg, &[]);
 
-        for mesh in &self.mesh_manager.meshes {
+        for mesh in &mesh_manager.meshes {
             rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             rpass.set_vertex_buffer(1, mesh.models_buffer.slice(..));
             rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -418,10 +393,6 @@ impl Renderer {
 
     pub fn resize(&mut self, device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) {
         self.depth_texture = create_depth_texture(device, swapchain);
-    }
-
-    pub fn mesh_manager(&mut self) -> &mut MeshManager {
-        &mut self.mesh_manager
     }
 }
 
