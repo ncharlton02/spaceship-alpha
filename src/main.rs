@@ -57,7 +57,7 @@ impl<'a> app::Application for AppState<'a> {
         let renderer = Renderer::new(device, &swapchain);
         let blocks = block::load_blocks(device, &mut mesh_manager);
         let camera = Camera {
-            position: (-3.0, 0.0, 3.0).into(),
+            position: (-12.0, 0.0, 12.0).into(),
             yaw: 0.0,
             pitch: -1.0,
             aspect: swapchain.width as f32 / swapchain.height as f32,

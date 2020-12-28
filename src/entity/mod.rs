@@ -1,7 +1,6 @@
 use crate::block::Blocks;
 use crate::graphics::{MeshId, MeshManager, Model, ModelId};
-use specs::prelude::*;
-use specs::Component;
+use specs::{prelude::*, Component};
 
 pub use ship::{ShipComp, Tile, TileComp};
 

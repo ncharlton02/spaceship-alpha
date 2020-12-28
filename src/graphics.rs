@@ -187,7 +187,7 @@ struct GPUMesh {
 }
 
 impl GPUMesh {
-    const MODEL_COUNT: u64 = 32;
+    const MODEL_COUNT: u64 = 128;
 
     fn create(device: &wgpu::Device, mesh: &Mesh, id: usize) -> GPUMesh {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
