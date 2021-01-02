@@ -1,10 +1,12 @@
-use crate::block::Blocks;
 use crate::graphics::{MeshId, MeshManager, Model, ModelId};
-use specs::{prelude::*, Component};
+use crate::{block::Blocks, floor::Floors};
+use specs::{prelude::*, shred::FetchMut, storage::MaskedStorage, Component};
 
-pub use ship::{ShipComp, Tile, TileComp};
+pub use ship::{BlockEntity, Ship, Tile};
 
 pub mod ship;
+
+pub type SimpleStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
 
 #[derive(Component)]
 #[storage(FlaggedStorage)]
@@ -75,13 +77,14 @@ pub struct ECS<'a> {
 }
 
 impl<'a> ECS<'a> {
-    pub fn new(mesh_manager: MeshManager, blocks: Blocks) -> Self {
+    pub fn new(mesh_manager: MeshManager, blocks: Blocks, floors: Floors) -> Self {
         let mut world = World::new();
         world.register::<ModelComp>();
-        world.register::<ShipComp>();
-        world.register::<TileComp>();
+        world.register::<Ship>();
+        world.register::<BlockEntity>();
         world.insert(mesh_manager);
         world.insert(blocks);
+        world.insert(floors);
 
         let model_update_system = {
             let mut comps = world.write_storage::<ModelComp>();

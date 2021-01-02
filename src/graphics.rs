@@ -167,6 +167,10 @@ impl MeshManager {
                 .models
                 .get(index)
                 .unwrap_or_else(|| panic!("Invalid mesh ID: {}", index));
+            if models.len() > GPUMesh::MODEL_COUNT as usize {
+                panic!("Too many models of MeshId={}", index);
+            }
+
             //We need to place the matrices in a struct that we can mark as Pod / Zeroable
             let models: Vec<ModelMatrix> = models
                 .iter()
@@ -187,7 +191,7 @@ struct GPUMesh {
 }
 
 impl GPUMesh {
-    const MODEL_COUNT: u64 = 128;
+    const MODEL_COUNT: u64 = 512;
 
     fn create(device: &wgpu::Device, mesh: &Mesh, id: usize) -> GPUMesh {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

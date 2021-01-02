@@ -4,11 +4,12 @@ use graphics::{Camera, MeshManager, Renderer};
 use std::collections::HashSet;
 use winit::event;
 
-pub const WIREFRAME_MODE: bool = true;
+pub const WIREFRAME_MODE: bool = false;
 
 mod app;
 mod block;
 mod entity;
+mod floor;
 mod graphics;
 
 struct AppState<'a: 'static> {
@@ -56,6 +57,7 @@ impl<'a> app::Application for AppState<'a> {
         let mut mesh_manager = MeshManager::new();
         let renderer = Renderer::new(device, &swapchain);
         let blocks = block::load_blocks(device, &mut mesh_manager);
+        let floors = floor::load_floors(device, &mut mesh_manager);
         let camera = Camera {
             position: (-12.0, 0.0, 12.0).into(),
             yaw: 0.0,
@@ -66,7 +68,7 @@ impl<'a> app::Application for AppState<'a> {
             far: 100.0,
         };
 
-        let ecs = ECS::new(mesh_manager, blocks);
+        let ecs = ECS::new(mesh_manager, blocks, floors);
         let keys = Keys(HashSet::new());
 
         AppState {
