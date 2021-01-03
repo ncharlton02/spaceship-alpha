@@ -1,4 +1,4 @@
-use crate::graphics::{Mesh, MeshId, MeshManager};
+use crate::graphics::{self, Mesh, MeshId, MeshManager};
 use cgmath::{Point2, Point3};
 
 pub type BlockId = usize;
@@ -13,6 +13,8 @@ pub struct Block {
 pub struct Blocks {
     blocks: Vec<Block>,
     pub wall: BlockId,
+    pub engine: BlockId,
+    pub cube: BlockId,
 }
 
 impl Blocks {
@@ -27,15 +29,29 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
     let mut blocks = Vec::new();
     let wall = create_block(
         &mut blocks,
-        mesh_manager.add(
-            device,
-            &Mesh::rectangular_prism(1.0, 1.0, 4.0, Point3::new(0.8, 0.8, 0.8)),
-        ),
+        mesh_manager.add(device, &graphics::load_mesh("wall")),
         (1, 1),
         "wall",
     );
+    let engine = create_block(
+        &mut blocks,
+        mesh_manager.add(device, &graphics::load_mesh("engine")),
+        (1, 1),
+        "engine",
+    );
+    let cube = create_block(
+        &mut blocks,
+        mesh_manager.add(device, &graphics::load_mesh("box")),
+        (1, 1),
+        "Box",
+    );
 
-    Blocks { blocks, wall }
+    Blocks {
+        blocks,
+        wall,
+        engine,
+        cube,
+    }
 }
 
 fn create_block(

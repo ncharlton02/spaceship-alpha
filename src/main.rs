@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use cgmath::{prelude::*, Point2, Vector3};
 use entity::ECS;
 use graphics::{Camera, MeshManager, Renderer};
@@ -21,8 +24,8 @@ struct AppState<'a: 'static> {
 
 impl AppState<'_> {
     fn update_camera(&mut self) {
-        let rotate_speed = 0.01;
-        let move_speed = 0.04;
+        let rotate_speed = 0.02;
+        let move_speed = 0.16;
 
         if self.keys.is_key_down(event::VirtualKeyCode::Q) {
             self.camera.yaw += rotate_speed;

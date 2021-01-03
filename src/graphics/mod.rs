@@ -3,6 +3,10 @@ use generational_arena::Arena;
 use std::mem;
 use wgpu::util::DeviceExt;
 
+pub use obj::*;
+
+mod obj;
+
 pub struct Mesh {
     pub name: String,
     pub vertices: Vec<Vertex>,
@@ -268,9 +272,9 @@ impl Renderer {
         });
 
         let vertex_shader =
-            device.create_shader_module(&wgpu::include_spirv!("shaders/basic.vert.spv"));
+            device.create_shader_module(&wgpu::include_spirv!("../shaders/basic.vert.spv"));
         let frag_shader =
-            device.create_shader_module(&wgpu::include_spirv!("shaders/basic.frag.spv"));
+            device.create_shader_module(&wgpu::include_spirv!("../shaders/basic.frag.spv"));
         let depth_texture = create_depth_texture(device, swapchain);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -401,9 +405,7 @@ impl Renderer {
 }
 
 struct GPUTexture {
-    texture: wgpu::Texture,
     view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
 }
 
 fn create_depth_texture(
@@ -437,11 +439,7 @@ fn create_depth_texture(
         ..Default::default()
     });
 
-    GPUTexture {
-        texture,
-        view,
-        sampler,
-    }
+    GPUTexture { view }
 }
 
 #[derive(Clone, Copy)]

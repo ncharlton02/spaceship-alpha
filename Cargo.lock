@@ -1629,6 +1629,7 @@ dependencies = [
  "cgmath",
  "futures",
  "generational-arena",
+ "lazy_static",
  "specs",
  "wgpu",
  "winit",

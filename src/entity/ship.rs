@@ -129,8 +129,8 @@ impl<'a> System<'a> for ShipBuildSystem {
 pub fn create_ship(world: &mut World) {
     let mut tiles = HashMap::new();
     let initial_size = 32;
-    for x in 0..initial_size {
-        for y in 0..initial_size {
+    for x in -initial_size..initial_size {
+        for y in -initial_size..initial_size {
             tiles.insert(
                 (x, y).into(),
                 Tile {
@@ -147,9 +147,12 @@ pub fn create_ship(world: &mut World) {
 
 fn build_initial_ship(world: &mut World, ship: Entity) {
     let wall = world.fetch::<Blocks>().wall;
+    let engine = world.fetch::<Blocks>().engine;
+    let cube = world.fetch::<Blocks>().cube;
+
     let floor = world.fetch::<Floors>().metal;
     let mut actions = Vec::new();
-    let size = 15;
+    let size = 7;
 
     for x in 0..=size {
         for y in 0..=size {
@@ -160,6 +163,15 @@ fn build_initial_ship(world: &mut World, ship: Entity) {
             }
         }
     }
+    actions.push(BuildAction::BuildBlock(Point2::new(size + 1, -2), engine));
+    actions.push(BuildAction::BuildBlock(Point2::new(size, -2), cube));
+    actions.push(BuildAction::BuildBlock(Point2::new(size, -1), cube));
+    actions.push(BuildAction::BuildBlock(Point2::new(size, size + 1), cube));
+    actions.push(BuildAction::BuildBlock(Point2::new(size, size + 2), cube));
+    actions.push(BuildAction::BuildBlock(
+        Point2::new(size + 1, size + 2),
+        engine,
+    ));
 
     ShipBuildSystem { ship, actions }.run_now(&world);
 }
