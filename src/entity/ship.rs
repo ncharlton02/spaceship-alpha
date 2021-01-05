@@ -1,7 +1,6 @@
-use super::{ModelComp, SimpleStorage};
+use super::{Model, SimpleStorage, Transform};
 use crate::block::{Block, BlockId, Blocks};
 use crate::floor::{Floor, Floors};
-use crate::graphics::Model;
 use cgmath::Point2;
 use specs::{prelude::*, Component};
 use std::collections::HashMap;
@@ -43,8 +42,9 @@ impl ShipBuildSystem {
         tiles: &mut HashMap<Point2<i16>, Tile>,
         block: &Block,
         entities: &Entities,
-        models: &mut SimpleStorage<'_, ModelComp>,
+        models: &mut SimpleStorage<'_, Model>,
         block_entities: &mut SimpleStorage<'_, BlockEntity>,
+        transforms: &mut SimpleStorage<'_, Transform>,
     ) {
         if block.size.x > 1 || block.size.y > 1 {
             unimplemented!();
@@ -53,19 +53,23 @@ impl ShipBuildSystem {
         let tile = tiles
             .get_mut(&pos)
             .unwrap_or_else(|| panic!("Invalid Tile: {:?}", pos));
-
-        let model = Model::new((pos.x as f32, pos.y as f32, 0.0).into(), 0.0);
         let block_entity = entities.create();
 
         tile.block = Some(block_entity);
         models
-            .insert(block_entity, ModelComp::new(block.mesh_id, model))
+            .insert(block_entity, Model::new(block.mesh_id))
             .unwrap();
         block_entities
             .insert(block_entity, BlockEntity { root: pos })
             .unwrap();
+        transforms
+            .insert(
+                block_entity,
+                Transform::from_position(pos.x as f32, pos.y as f32, 0.0),
+            )
+            .unwrap();
 
-        println!("Built {} ({}, {})", block.type_name, pos.x, pos.y);
+        // println!("Built {} ({}, {})", block.type_name, pos.x, pos.y);
     }
 
     fn build_floor(
@@ -73,21 +77,26 @@ impl ShipBuildSystem {
         tiles: &mut HashMap<Point2<i16>, Tile>,
         floor: Floor,
         entities: &Entities,
-        models: &mut SimpleStorage<'_, ModelComp>,
+        models: &mut SimpleStorage<'_, Model>,
+        transforms: &mut SimpleStorage<'_, Transform>,
     ) {
         let tile = tiles
             .get_mut(&pos)
             .unwrap_or_else(|| panic!("Invalid Tile: {:?}", pos));
-
-        let model = Model::new((pos.x as f32, pos.y as f32, 0.0).into(), 0.0);
         let tile_entity = entities.create();
 
         tile.floor = Some(tile_entity);
         models
-            .insert(tile_entity, ModelComp::new(floor.into(), model))
+            .insert(tile_entity, Model::new(floor.into()))
+            .unwrap();
+        transforms
+            .insert(
+                tile_entity,
+                Transform::from_position(pos.x as f32, pos.y as f32, 0.0),
+            )
             .unwrap();
 
-        println!("Built Floor ({}, {})", pos.x, pos.y);
+        // println!("Built Floor ({}, {})", pos.x, pos.y);
     }
 }
 
@@ -97,11 +106,12 @@ impl<'a> System<'a> for ShipBuildSystem {
         ReadExpect<'a, Blocks>,
         WriteStorage<'a, Ship>,
         WriteStorage<'a, BlockEntity>,
-        WriteStorage<'a, ModelComp>,
+        WriteStorage<'a, Model>,
+        WriteStorage<'a, Transform>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, blocks, mut ships, mut block_entities, mut models) = data;
+        let (entities, blocks, mut ships, mut block_entities, mut models, mut transforms) = data;
         let tiles = &mut ships.get_mut(self.ship).unwrap().tiles;
 
         for action in &self.actions {
@@ -115,11 +125,17 @@ impl<'a> System<'a> for ShipBuildSystem {
                         &entities,
                         &mut models,
                         &mut block_entities,
+                        &mut transforms,
                     );
                 }
-                BuildAction::BuildFloor(pos, floor) => {
-                    ShipBuildSystem::build_floor(*pos, tiles, *floor, &entities, &mut models)
-                }
+                BuildAction::BuildFloor(pos, floor) => ShipBuildSystem::build_floor(
+                    *pos,
+                    tiles,
+                    *floor,
+                    &entities,
+                    &mut models,
+                    &mut transforms,
+                ),
                 _ => unimplemented!(),
             }
         }

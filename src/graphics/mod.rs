@@ -1,4 +1,4 @@
-use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
+use cgmath::{prelude::*, Matrix4, Point3, Vector3};
 use generational_arena::Arena;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -104,26 +104,6 @@ pub struct MeshId(usize);
 
 pub type ModelId = generational_arena::Index;
 
-pub struct Model {
-    pub position: Vector3<f32>,
-    pub rotation: Quaternion<f32>,
-}
-
-impl Model {
-    pub fn new(position: Vector3<f32>, angle_z: f32) -> Self {
-        Self {
-            position,
-            rotation: Quaternion::from_axis_angle(Vector3::unit_z(), cgmath::Rad(angle_z)),
-        }
-    }
-}
-
-impl Model {
-    fn as_matrix(&self) -> Matrix4<f32> {
-        Matrix4::from(self.rotation) * Matrix4::from_translation(self.position)
-    }
-}
-
 pub struct MeshManager {
     meshes: Vec<GPUMesh>,
     models: Vec<Arena<Matrix4<f32>>>,
@@ -148,21 +128,21 @@ impl MeshManager {
         MeshId(id)
     }
 
-    pub fn new_model(&mut self, mesh: MeshId, model: &Model) -> ModelId {
+    pub fn new_model(&mut self, mesh: MeshId, model: Matrix4<f32>) -> ModelId {
         let arena = self
             .models
             .get_mut(mesh.0)
             .unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh.0));
-        arena.insert(model.as_matrix())
+        arena.insert(model)
     }
 
     /// Updates the mesh manager with these updates. Will be pushed to the GPU during the next render
-    pub fn update_model(&mut self, mesh_id: MeshId, model_id: ModelId, model: &Model) {
+    pub fn update_model(&mut self, mesh_id: MeshId, model_id: ModelId, model: Matrix4<f32>) {
         let arena = self
             .models
             .get_mut(mesh_id.0)
             .unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh_id.0));
-        (*arena.get_mut(model_id).unwrap()) = model.as_matrix();
+        (*arena.get_mut(model_id).unwrap()) = model;
     }
 
     fn push_meshes_to_gpu(&mut self, queue: &wgpu::Queue) {

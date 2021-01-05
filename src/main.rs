@@ -71,7 +71,7 @@ impl<'a> app::Application for AppState<'a> {
             far: 100.0,
         };
 
-        let ecs = ECS::new(mesh_manager, blocks, floors);
+        let ecs = ECS::new(device, mesh_manager, blocks, floors);
         let keys = Keys(HashSet::new());
 
         AppState {
