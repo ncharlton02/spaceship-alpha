@@ -1,7 +1,7 @@
-use super::{Model, SimpleStorage, Transform};
+use super::{Collider, ColliderShape, Model, SimpleMutStorage, Transform};
 use crate::block::{Block, BlockId, Blocks};
 use crate::floor::{Floor, Floors};
-use cgmath::Point2;
+use cgmath::{Point2, Vector3};
 use specs::{prelude::*, Component};
 use std::collections::HashMap;
 
@@ -42,9 +42,10 @@ impl ShipBuildSystem {
         tiles: &mut HashMap<Point2<i16>, Tile>,
         block: &Block,
         entities: &Entities,
-        models: &mut SimpleStorage<'_, Model>,
-        block_entities: &mut SimpleStorage<'_, BlockEntity>,
-        transforms: &mut SimpleStorage<'_, Transform>,
+        models: &mut SimpleMutStorage<'_, Model>,
+        block_entities: &mut SimpleMutStorage<'_, BlockEntity>,
+        transforms: &mut SimpleMutStorage<'_, Transform>,
+        colliders: &mut SimpleMutStorage<'_, Collider>,
     ) {
         if block.size.x > 1 || block.size.y > 1 {
             unimplemented!();
@@ -65,7 +66,21 @@ impl ShipBuildSystem {
         transforms
             .insert(
                 block_entity,
-                Transform::from_position(pos.x as f32, pos.y as f32, 0.0),
+                Transform::from_position(pos.x as f32, pos.y as f32, block.height / 2.0),
+            )
+            .unwrap();
+        colliders
+            .insert(
+                block_entity,
+                Collider {
+                    shape: ColliderShape::Cuboid(Vector3::new(
+                        block.size.x as f32,
+                        block.size.y as f32,
+                        block.height,
+                    )),
+                    group: Collider::SHIP,
+                    whitelist: vec![Collider::ASTEROID],
+                },
             )
             .unwrap();
 
@@ -77,8 +92,8 @@ impl ShipBuildSystem {
         tiles: &mut HashMap<Point2<i16>, Tile>,
         floor: Floor,
         entities: &Entities,
-        models: &mut SimpleStorage<'_, Model>,
-        transforms: &mut SimpleStorage<'_, Transform>,
+        models: &mut SimpleMutStorage<'_, Model>,
+        transforms: &mut SimpleMutStorage<'_, Transform>,
     ) {
         let tile = tiles
             .get_mut(&pos)
@@ -108,10 +123,19 @@ impl<'a> System<'a> for ShipBuildSystem {
         WriteStorage<'a, BlockEntity>,
         WriteStorage<'a, Model>,
         WriteStorage<'a, Transform>,
+        WriteStorage<'a, Collider>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, blocks, mut ships, mut block_entities, mut models, mut transforms) = data;
+        let (
+            entities,
+            blocks,
+            mut ships,
+            mut block_entities,
+            mut models,
+            mut transforms,
+            mut colliders,
+        ) = data;
         let tiles = &mut ships.get_mut(self.ship).unwrap().tiles;
 
         for action in &self.actions {
@@ -126,6 +150,7 @@ impl<'a> System<'a> for ShipBuildSystem {
                         &mut models,
                         &mut block_entities,
                         &mut transforms,
+                        &mut colliders,
                     );
                 }
                 BuildAction::BuildFloor(pos, floor) => ShipBuildSystem::build_floor(

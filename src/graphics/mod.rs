@@ -145,6 +145,14 @@ impl MeshManager {
         (*arena.get_mut(model_id).unwrap()) = model;
     }
 
+    pub fn remove_model(&mut self, mesh_id: MeshId, model_id: ModelId) {
+        let arena = self
+            .models
+            .get_mut(mesh_id.0)
+            .unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh_id.0));
+        arena.remove(model_id).expect("Invalid model ID!");
+    }
+
     fn push_meshes_to_gpu(&mut self, queue: &wgpu::Queue) {
         for (index, mesh) in &mut self.meshes.iter_mut().enumerate() {
             let models = self
@@ -406,18 +414,6 @@ fn create_depth_texture(
         usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        compare: Some(wgpu::CompareFunction::LessEqual),
-        lod_min_clamp: -100.0,
-        lod_max_clamp: 100.0,
-        ..Default::default()
-    });
 
     GPUTexture { view }
 }

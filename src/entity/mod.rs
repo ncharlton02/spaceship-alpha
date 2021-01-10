@@ -1,19 +1,30 @@
-use crate::graphics::{self, MeshId, MeshManager, ModelId};
+use crate::graphics::{MeshId, MeshManager, ModelId};
 use crate::{block::Blocks, floor::Floors};
 use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
-use specs::{prelude::*, shred::FetchMut, storage::MaskedStorage, Component};
-
+pub use objects::{AsteroidMarker, ObjectMeshes};
+pub use physics::{Collider, ColliderShape, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
+use specs::{
+    prelude::*,
+    shred::{Fetch, FetchMut},
+    storage::MaskedStorage,
+    Component,
+};
 
-pub mod ship;
+mod objects;
+mod physics;
+mod ship;
 
-pub type SimpleStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
+pub type SimpleStorage<'a, T> = Storage<'a, T, Fetch<'a, MaskedStorage<T>>>;
+pub type SimpleMutStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
 
-#[derive(Component)]
-#[storage(FlaggedStorage)]
 pub struct Model {
     pub mesh_id: MeshId,
     model_id: Option<ModelId>,
+}
+
+impl Component for Model {
+    type Storage = FlaggedStorage<Self, VecStorage<Self>>;
 }
 
 impl Model {
@@ -68,7 +79,6 @@ impl<'a> System<'a> for ModelUpdateSystem {
         for (model, transform, _) in (&mut models, &transforms, &self.modified)
             .join()
             .filter(|(model, _, _)| model.model_id.is_some())
-        // TODO -> Filter Map?
         {
             mesh_manager.update_model(
                 model.mesh_id,
@@ -77,11 +87,12 @@ impl<'a> System<'a> for ModelUpdateSystem {
             );
         }
 
-        for (_, _) in (&mut models, &self.removed)
+        for (model, _) in (&mut models, &self.removed)
             .join()
             .filter(|(model, _)| model.model_id.is_some())
         {
-            unimplemented!();
+            mesh_manager.remove_model(model.mesh_id, model.model_id.unwrap());
+            model.model_id = None;
         }
     }
 }
@@ -98,13 +109,16 @@ impl<'a> ECS<'a> {
         blocks: Blocks,
         floors: Floors,
     ) -> Self {
-        let meshes = MiscMeshes::load(device, &mut mesh_manager);
-        let asteroid = meshes.asteroid;
+        let meshes = ObjectMeshes::load(device, &mut mesh_manager);
         let mut world = World::new();
         world.register::<Model>();
         world.register::<Ship>();
         world.register::<BlockEntity>();
         world.register::<Transform>();
+        world.register::<RigidBody>();
+        world.register::<Collider>();
+        world.register::<AsteroidMarker>();
+        world.insert(EcsUtils::default());
         world.insert(meshes);
         world.insert(mesh_manager);
         world.insert(blocks);
@@ -123,33 +137,68 @@ impl<'a> ECS<'a> {
         };
 
         let dispatcher = DispatcherBuilder::new()
-            .with(model_update_system, "update_models", &[])
+            .with(physics::PhysicsSystem, "physics_system", &[])
+            .with(model_update_system, "update_models", &["physics_system"])
             .build();
 
         ship::create_ship(&mut world);
-
-        world
-            .create_entity()
-            .with(Transform::from_position(-5.0, 0.0, 3.0))
-            .with(Model::new(asteroid))
-            .build();
+        objects::create_asteroid(&mut world);
 
         ECS { world, dispatcher }
     }
 
     pub fn update(&mut self) {
         self.dispatcher.dispatch(&self.world);
+
+        {
+            let mut ecs_utils = self.world.fetch_mut::<EcsUtils>();
+            let mut mesh_manager = self.world.fetch_mut::<MeshManager>();
+
+            for entity in &ecs_utils.to_be_removed {
+                if let Some(model) = self
+                    .world
+                    .read_component::<Model>()
+                    .get(*entity)
+                    .filter(|model| model.model_id.is_some())
+                {
+                    mesh_manager.remove_model(model.mesh_id, model.model_id.unwrap());
+                }
+
+                self.world
+                    .entities()
+                    .delete(*entity)
+                    .expect("Unable to delete entity marked for removal");
+            }
+            ecs_utils.to_be_removed.clear();
+        }
+
         self.world.maintain();
     }
 }
 
+#[derive(Default)]
+pub struct EcsUtils {
+    to_be_removed: Vec<Entity>,
+}
+
+impl EcsUtils {
+    /// Marks an entity to be removed at the end of the update.
+    /// This should be used over world.delete() because this will delete
+    /// the model from the renderer
+    pub fn mark_for_removal(&mut self, entity: Entity) {
+        self.to_be_removed.push(entity);
+    }
+}
+
 /// Represents an entity's position, rotation, and scale within space.
-#[derive(Component)]
-#[storage(FlaggedStorage)]
 pub struct Transform {
     position: Vector3<f32>,
     rotation: Quaternion<f32>,
     scale: Point3<f32>,
+}
+
+impl Component for Transform {
+    type Storage = FlaggedStorage<Self, VecStorage<Self>>;
 }
 
 impl Transform {
@@ -165,20 +214,5 @@ impl Transform {
         Matrix4::from_translation(self.position)
             * Matrix4::from(self.rotation)
             * Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z)
-    }
-}
-
-/// Stores miscellaneous meshes (these are usually entities)
-pub struct MiscMeshes {
-    pub asteroid: MeshId,
-}
-
-impl MiscMeshes {
-    pub fn load(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> MiscMeshes {
-        let mut load = |name: &str| mesh_manager.add(device, &graphics::load_mesh(name));
-
-        MiscMeshes {
-            asteroid: load("asteroid"),
-        }
     }
 }

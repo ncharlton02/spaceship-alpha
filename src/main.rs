@@ -133,3 +133,15 @@ impl Keys {
         self.0.contains(&key)
     }
 }
+
+#[allow(dead_code)]
+pub fn print_time(title: &str) {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let time_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis()
+        % 1000;
+
+    println!("{}: {}", title, time_ms);
+}
