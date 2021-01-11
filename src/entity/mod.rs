@@ -11,9 +11,9 @@ use specs::{
     Component,
 };
 
-mod objects;
-mod physics;
-mod ship;
+pub mod objects;
+pub mod physics;
+pub mod ship;
 
 pub type SimpleStorage<'a, T> = Storage<'a, T, Fetch<'a, MaskedStorage<T>>>;
 pub type SimpleMutStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
@@ -36,12 +36,13 @@ impl Model {
     }
 }
 
+// TODO: Have models automatically deleted using flagged storage.
+// Blocked By: https://github.com/amethyst/specs/issues/720
 pub struct ModelUpdateSystem {
     transform_reader: ReaderId<ComponentEvent>,
     model_reader: ReaderId<ComponentEvent>,
     inserted: BitSet,
     modified: BitSet,
-    removed: BitSet,
 }
 
 impl<'a> System<'a> for ModelUpdateSystem {
@@ -55,12 +56,10 @@ impl<'a> System<'a> for ModelUpdateSystem {
         let (mut mesh_manager, transforms, mut models) = data;
         self.inserted.clear();
         self.modified.clear();
-        self.removed.clear();
 
         for event in models.channel().read(&mut self.model_reader) {
             match event {
                 ComponentEvent::Inserted(id) => self.inserted.add(*id),
-                ComponentEvent::Removed(id) => self.removed.add(*id),
                 _ => false,
             };
         }
@@ -85,14 +84,6 @@ impl<'a> System<'a> for ModelUpdateSystem {
                 model.model_id.unwrap(),
                 transform.as_matrix(),
             );
-        }
-
-        for (model, _) in (&mut models, &self.removed)
-            .join()
-            .filter(|(model, _)| model.model_id.is_some())
-        {
-            mesh_manager.remove_model(model.mesh_id, model.model_id.unwrap());
-            model.model_id = None;
         }
     }
 }
@@ -132,7 +123,6 @@ impl<'a> ECS<'a> {
                 model_reader,
                 inserted: BitSet::new(),
                 modified: BitSet::new(),
-                removed: BitSet::new(),
             }
         };
 
@@ -149,19 +139,23 @@ impl<'a> ECS<'a> {
 
     pub fn update(&mut self) {
         self.dispatcher.dispatch(&self.world);
+        self.maintain();
+    }
 
+    pub fn maintain(&mut self) {
         {
             let mut ecs_utils = self.world.fetch_mut::<EcsUtils>();
             let mut mesh_manager = self.world.fetch_mut::<MeshManager>();
 
             for entity in &ecs_utils.to_be_removed {
-                if let Some(model) = self
+                if let Some(mut model) = self
                     .world
-                    .read_component::<Model>()
-                    .get(*entity)
+                    .write_component::<Model>()
+                    .get_mut(*entity)
                     .filter(|model| model.model_id.is_some())
                 {
                     mesh_manager.remove_model(model.mesh_id, model.model_id.unwrap());
+                    model.model_id = None;
                 }
 
                 self.world
@@ -173,6 +167,13 @@ impl<'a> ECS<'a> {
         }
 
         self.world.maintain();
+    }
+
+    pub fn mark_for_removal(&mut self, entity: Entity) {
+        self.world
+            .get_mut::<EcsUtils>()
+            .unwrap()
+            .mark_for_removal(entity);
     }
 }
 
@@ -186,7 +187,9 @@ impl EcsUtils {
     /// This should be used over world.delete() because this will delete
     /// the model from the renderer
     pub fn mark_for_removal(&mut self, entity: Entity) {
-        self.to_be_removed.push(entity);
+        if !self.to_be_removed.contains(&entity) {
+            self.to_be_removed.push(entity);
+        }
     }
 }
 

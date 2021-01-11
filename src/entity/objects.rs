@@ -27,10 +27,11 @@ pub struct AsteroidMarker;
 
 pub fn create_asteroid(world: &mut World) {
     let asteroid = world.fetch::<ObjectMeshes>().asteroid;
+    println!("Creating Asteroid!");
 
     world
         .create_entity()
-        .with(Transform::from_position(-5.0, 0.0, 3.0))
+        .with(Transform::from_position(-5.0, -5.0, 4.0))
         .with(Model::new(asteroid))
         .with(RigidBody {
             velocity: Vector3::new(1.0, 1.0, 0.0),

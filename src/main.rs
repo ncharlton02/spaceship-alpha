@@ -2,8 +2,9 @@
 extern crate lazy_static;
 
 use cgmath::{prelude::*, Point2, Vector3};
-use entity::ECS;
+use entity::{Collider, ECS};
 use graphics::{Camera, MeshManager, Renderer};
+use specs::RunNow;
 use std::collections::HashSet;
 use winit::event;
 
@@ -20,6 +21,7 @@ struct AppState<'a: 'static> {
     camera: Camera,
     ecs: entity::ECS<'a>,
     keys: Keys,
+    window_size: Point2<f32>,
 }
 
 impl AppState<'_> {
@@ -73,12 +75,14 @@ impl<'a> app::Application for AppState<'a> {
 
         let ecs = ECS::new(device, mesh_manager, blocks, floors);
         let keys = Keys(HashSet::new());
+        let window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
 
         AppState {
             renderer,
             camera,
             ecs,
             keys,
+            window_size,
         }
     }
 
@@ -90,6 +94,7 @@ impl<'a> app::Application for AppState<'a> {
     ) {
         self.camera.resize(swapchain);
         self.renderer.resize(device, swapchain);
+        self.window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
     }
 
     fn key_event(&mut self, key: event::VirtualKeyCode, state: event::ElementState) {
@@ -103,7 +108,27 @@ impl<'a> app::Application for AppState<'a> {
 
     fn mouse_moved(&mut self, _: Point2<f32>) {}
 
-    fn click_event(&mut self, _: event::MouseButton, _: event::ElementState, _: Point2<f32>) {}
+    fn click_event(&mut self, _: event::MouseButton, state: event::ElementState, pt: Point2<f32>) {
+        if state != event::ElementState::Pressed {
+            return;
+        }
+
+        let near = self
+            .camera
+            .unproject(Vector3::new(pt.x, pt.y, 0.0), self.window_size);
+        let far = self
+            .camera
+            .unproject(Vector3::new(pt.x, pt.y, 1.0), self.window_size);
+
+        let mut raycast_system = entity::physics::RaycastSystem::new();
+        raycast_system.run_now(&mut self.ecs.world);
+
+        if let Some(asteroid) = raycast_system.raycast(vec![Collider::ASTEROID], near, far) {
+            self.ecs.mark_for_removal(asteroid);
+            entity::objects::create_asteroid(&mut self.ecs.world);
+            self.ecs.maintain();
+        }
+    }
 
     fn fixed_update(&mut self, _: &wgpu::Device, _: &wgpu::Queue) {
         self.update_camera();
