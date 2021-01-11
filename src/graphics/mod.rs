@@ -1,4 +1,4 @@
-use cgmath::{prelude::*, Matrix4, Point3, Vector3};
+use cgmath::{prelude::*, Matrix4, Point2, Point3, Vector3, Vector4};
 use generational_arena::Arena;
 use std::mem;
 use wgpu::util::DeviceExt;
@@ -456,5 +456,34 @@ impl Camera {
         let proj = cgmath::perspective(cgmath::Deg(self.fov), self.aspect, self.near, self.far);
 
         CameraMatrix(Self::OPENGL_TO_WGPU_MATRIX * proj * view)
+    }
+
+    pub fn unproject(&self, input: Vector3<f32>, screen_size: Point2<f32>) -> Vector3<f32> {
+        // See https://stackoverflow.com/questions/23644470/how-to-convert-mouse-coordinate-on-screen-to-3d-coordinate
+        let mut normalized_coords = Vector4::new(
+            (input.x / screen_size.x) * 2.0 - 1.0,
+            ((screen_size.y - input.y) / screen_size.y) * 2.0 - 1.0,
+            input.z,
+            1.0,
+        );
+        let inv_matrix = self
+            .build_view_projection_matrix()
+            .0
+            .invert()
+            .expect("Unable to invert matrix");
+
+        normalized_coords = inv_matrix * normalized_coords;
+
+        if normalized_coords.w == 0.0 {
+            Vector3::new(0.0, 0.0, 0.0)
+        } else {
+            let w = 1.0 / normalized_coords.w;
+
+            Vector3::new(
+                normalized_coords.x,
+                normalized_coords.y,
+                normalized_coords.z,
+            ) * w
+        }
     }
 }

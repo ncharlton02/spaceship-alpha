@@ -30,15 +30,15 @@ pub fn create_asteroid(world: &mut World) {
 
     world
         .create_entity()
-        .with(Transform::from_position(-5.0, 0.0, 3.0))
+        .with(Transform::from_position(0.0, 0.0, 4.0))
         .with(Model::new(asteroid))
         .with(RigidBody {
-            velocity: Vector3::new(1.0, 1.0, 0.0),
+            velocity: Vector3::new(0.0, 0.0, 0.0),
         })
         .with(Collider {
             shape: ColliderShape::Sphere(0.7),
             group: Collider::ASTEROID,
-            whitelist: vec![Collider::SHIP],
+            whitelist: vec![Collider::SHIP, Collider::RAY],
         })
         .with(AsteroidMarker)
         .build();

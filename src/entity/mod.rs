@@ -11,9 +11,9 @@ use specs::{
     Component,
 };
 
-mod objects;
-mod physics;
-mod ship;
+pub mod objects;
+pub mod physics;
+pub mod ship;
 
 pub type SimpleStorage<'a, T> = Storage<'a, T, Fetch<'a, MaskedStorage<T>>>;
 pub type SimpleMutStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
