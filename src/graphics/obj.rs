@@ -66,8 +66,8 @@ lazy_static! {
         color_pallette(7.0, 5.0, 175.0, 144.0, 0.0),
 
         //Row 7
-        color_pallette(0.0, 6.0, 193.0, 234.0, 0.0),
-        color_pallette(1.0, 6.0, 142.0, 198.0, 0.0),
+        color_pallette(0.0, 6.0, 193.0, 234.0, 225.0),
+        color_pallette(1.0, 6.0, 142.0, 198.0, 226.0),
         color_pallette(2.0, 6.0, 75.0, 147.0, 184.0),
         color_pallette(3.0, 6.0, 24.0, 86.0, 118.0),
         color_pallette(4.0, 6.0, 211.0, 233.0, 166.0),
@@ -134,6 +134,7 @@ fn get_color(pt: Point2<f32>) -> Point3<f32> {
     panic!("Invalid color: {:?}", pt);
 }
 
+#[allow(clippy::many_single_char_names)]
 fn color_pallette(x: f32, y: f32, r: f32, g: f32, b: f32) -> (Vector4<f32>, Point3<f32>) {
     let x0 = x / 8.0;
     let y0 = y / 8.0;
@@ -215,7 +216,7 @@ fn parse_float(input: Option<&str>) -> f32 {
 }
 
 fn parse_obj_vertex(input: Option<&str>) -> ObjVertex {
-    let mut parts = input.unwrap().split("/");
+    let mut parts = input.unwrap().split('/');
     let v = FromStr::from_str(parts.next().unwrap()).unwrap();
     let vt = FromStr::from_str(parts.next().unwrap()).unwrap();
     let vn = FromStr::from_str(parts.next().unwrap()).unwrap();

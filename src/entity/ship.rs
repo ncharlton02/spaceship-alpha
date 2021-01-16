@@ -1,8 +1,8 @@
-use super::{Collider, ColliderShape, Model, SimpleMutStorage, Transform};
-use crate::block::{Block, BlockId, Blocks};
+use super::{Collider, ColliderShape, Model, Transform};
+use crate::block::{BlockId, Blocks};
 use crate::floor::{Floor, Floors};
 use cgmath::{Point2, Vector3};
-use specs::{prelude::*, Component};
+use specs::{prelude::*, world::EntitiesRes, Component};
 use std::collections::HashMap;
 
 #[derive(Component)]
@@ -30,139 +30,64 @@ pub enum BuildAction {
     RemoveFloor(Point2<i16>),
 }
 
-/// A system that will build a block at a point
-pub struct ShipBuildSystem {
-    ship: Entity,
-    actions: Vec<BuildAction>,
-}
+pub fn execute_build_actions(world: &mut World, ship: Entity, actions: &[BuildAction]) {
+    let lazy_update = world.fetch::<LazyUpdate>();
+    let entities = world.fetch::<EntitiesRes>();
+    let mut ships = world.write_component::<Ship>();
+    let ship = ships.get_mut(ship).unwrap();
 
-impl ShipBuildSystem {
-    fn build_block(
-        pos: Point2<i16>,
-        tiles: &mut HashMap<Point2<i16>, Tile>,
-        block: &Block,
-        entities: &Entities,
-        models: &mut SimpleMutStorage<'_, Model>,
-        block_entities: &mut SimpleMutStorage<'_, BlockEntity>,
-        transforms: &mut SimpleMutStorage<'_, Transform>,
-        colliders: &mut SimpleMutStorage<'_, Collider>,
-    ) {
-        if block.size.x > 1 || block.size.y > 1 {
-            unimplemented!();
-        }
+    for action in actions {
+        match action {
+            BuildAction::BuildBlock(pos, block_id) => {
+                let blocks = world.fetch::<Blocks>();
+                let block = blocks.get_block(*block_id);
 
-        let tile = tiles
-            .get_mut(&pos)
-            .unwrap_or_else(|| panic!("Invalid Tile: {:?}", pos));
-        let block_entity = entities.create();
-
-        tile.block = Some(block_entity);
-        models
-            .insert(block_entity, Model::new(block.mesh_id))
-            .unwrap();
-        block_entities
-            .insert(block_entity, BlockEntity { root: pos })
-            .unwrap();
-        transforms
-            .insert(
-                block_entity,
-                Transform::from_position(pos.x as f32, pos.y as f32, block.height / 2.0),
-            )
-            .unwrap();
-        colliders
-            .insert(
-                block_entity,
-                Collider {
-                    shape: ColliderShape::Cuboid(Vector3::new(
-                        block.size.x as f32,
-                        block.size.y as f32,
-                        block.height,
-                    )),
-                    group: Collider::SHIP,
-                    whitelist: vec![Collider::ASTEROID],
-                },
-            )
-            .unwrap();
-
-        // println!("Built {} ({}, {})", block.type_name, pos.x, pos.y);
-    }
-
-    fn build_floor(
-        pos: Point2<i16>,
-        tiles: &mut HashMap<Point2<i16>, Tile>,
-        floor: Floor,
-        entities: &Entities,
-        models: &mut SimpleMutStorage<'_, Model>,
-        transforms: &mut SimpleMutStorage<'_, Transform>,
-    ) {
-        let tile = tiles
-            .get_mut(&pos)
-            .unwrap_or_else(|| panic!("Invalid Tile: {:?}", pos));
-        let tile_entity = entities.create();
-
-        tile.floor = Some(tile_entity);
-        models
-            .insert(tile_entity, Model::new(floor.into()))
-            .unwrap();
-        transforms
-            .insert(
-                tile_entity,
-                Transform::from_position(pos.x as f32, pos.y as f32, 0.0),
-            )
-            .unwrap();
-
-        // println!("Built Floor ({}, {})", pos.x, pos.y);
-    }
-}
-
-impl<'a> System<'a> for ShipBuildSystem {
-    type SystemData = (
-        Entities<'a>,
-        ReadExpect<'a, Blocks>,
-        WriteStorage<'a, Ship>,
-        WriteStorage<'a, BlockEntity>,
-        WriteStorage<'a, Model>,
-        WriteStorage<'a, Transform>,
-        WriteStorage<'a, Collider>,
-    );
-
-    fn run(&mut self, data: Self::SystemData) {
-        let (
-            entities,
-            blocks,
-            mut ships,
-            mut block_entities,
-            mut models,
-            mut transforms,
-            mut colliders,
-        ) = data;
-        let tiles = &mut ships.get_mut(self.ship).unwrap().tiles;
-
-        for action in &self.actions {
-            match action {
-                BuildAction::BuildBlock(pos, block_id) => {
-                    let block = blocks.get_block(*block_id);
-                    ShipBuildSystem::build_block(
-                        *pos,
-                        tiles,
-                        block,
-                        &entities,
-                        &mut models,
-                        &mut block_entities,
-                        &mut transforms,
-                        &mut colliders,
-                    );
+                if block.size.x > 1 || block.size.y > 1 {
+                    unimplemented!("Multiblock sizes not implemented!");
                 }
-                BuildAction::BuildFloor(pos, floor) => ShipBuildSystem::build_floor(
-                    *pos,
-                    tiles,
-                    *floor,
-                    &entities,
-                    &mut models,
-                    &mut transforms,
-                ),
-                _ => unimplemented!(),
+
+                let entity_builder = lazy_update
+                    .create_entity(&entities)
+                    .with(Model::new(block.mesh_id))
+                    .with(BlockEntity { root: *pos })
+                    .with(Transform::from_position(
+                        pos.x as f32,
+                        pos.y as f32,
+                        block.height / 2.0,
+                    ))
+                    .with(Collider {
+                        shape: ColliderShape::Cuboid(Vector3::new(
+                            block.size.x as f32,
+                            block.size.y as f32,
+                            block.height,
+                        )),
+                        group: Collider::SHIP,
+                        whitelist: vec![Collider::ASTEROID],
+                    });
+                let block_entity = if let Some(setup) = block.setup {
+                    (setup)(entity_builder).build()
+                } else {
+                    entity_builder.build()
+                };
+
+                ship.tiles
+                    .get_mut(pos)
+                    .expect("Placed block outside ship boundries")
+                    .block = Some(block_entity);
             }
+            BuildAction::BuildFloor(pos, floor) => {
+                let tile_entity = lazy_update
+                    .create_entity(&entities)
+                    .with(Model::new((*floor).into()))
+                    .with(Transform::from_position(pos.x as f32, pos.y as f32, 0.0))
+                    .build();
+
+                ship.tiles
+                    .get_mut(pos)
+                    .expect("Placed floor outside ship boundries")
+                    .block = Some(tile_entity);
+            }
+            _ => unimplemented!(),
         }
     }
 }
@@ -183,13 +108,13 @@ pub fn create_ship(world: &mut World) {
     }
 
     let ship = world.create_entity().with(Ship { tiles }).build();
-    build_initial_ship(world, ship);
+    let build_actions = build_initial_ship(&world);
+
+    execute_build_actions(world, ship, &build_actions);
 }
 
-fn build_initial_ship(world: &mut World, ship: Entity) {
-    let wall = world.fetch::<Blocks>().wall;
-    let engine = world.fetch::<Blocks>().engine;
-    let cube = world.fetch::<Blocks>().cube;
+fn build_initial_ship(world: &World) -> Vec<BuildAction> {
+    let blocks = world.fetch::<Blocks>();
 
     let floor = world.fetch::<Floors>().metal;
     let mut actions = Vec::new();
@@ -198,21 +123,34 @@ fn build_initial_ship(world: &mut World, ship: Entity) {
     for x in 0..=size {
         for y in 0..=size {
             if x == 0 || y == 0 || x == size || y == size {
-                actions.push(BuildAction::BuildBlock(Point2::new(x, y), wall));
+                actions.push(BuildAction::BuildBlock(Point2::new(x, y), blocks.wall));
             } else {
                 actions.push(BuildAction::BuildFloor(Point2::new(x, y), floor));
             }
         }
     }
-    actions.push(BuildAction::BuildBlock(Point2::new(size + 1, -2), engine));
-    actions.push(BuildAction::BuildBlock(Point2::new(size, -2), cube));
-    actions.push(BuildAction::BuildBlock(Point2::new(size, -1), cube));
-    actions.push(BuildAction::BuildBlock(Point2::new(size, size + 1), cube));
-    actions.push(BuildAction::BuildBlock(Point2::new(size, size + 2), cube));
+    actions.push(BuildAction::BuildBlock(
+        Point2::new(size + 1, -2),
+        blocks.engine,
+    ));
+    actions.push(BuildAction::BuildBlock(Point2::new(size, -2), blocks.cube));
+    actions.push(BuildAction::BuildBlock(Point2::new(size, -1), blocks.cube));
+    actions.push(BuildAction::BuildBlock(
+        Point2::new(size, size + 1),
+        blocks.cube,
+    ));
+    actions.push(BuildAction::BuildBlock(
+        Point2::new(size, size + 2),
+        blocks.cube,
+    ));
+    actions.push(BuildAction::BuildBlock(
+        Point2::new(-1, size / 2),
+        blocks.miner,
+    ));
     actions.push(BuildAction::BuildBlock(
         Point2::new(size + 1, size + 2),
-        engine,
+        blocks.engine,
     ));
 
-    ShipBuildSystem { ship, actions }.run_now(&world);
+    actions
 }

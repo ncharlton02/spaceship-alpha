@@ -29,11 +29,12 @@ impl<'a> System<'a> for PhysicsSystem {
         ReadStorage<'a, Collider>,
         ReadStorage<'a, RigidBody>,
         ReadStorage<'a, super::BlockEntity>,
-        ReadStorage<'a, super::AsteroidMarker>,
+        ReadStorage<'a, super::objects::AsteroidMarker>,
+        ReadStorage<'a, super::objects::MiningMissle>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, mut ecs_utils, mut transforms, colliders, bodies, blocks, asteroids) = data;
+        let (entities, mut ecs_utils, mut transforms, colliders, bodies, blocks, asteroids, missles) = data;
         let mut world: CollisionWorld<f32, Entity> = CollisionWorld::new(0.02);
         let dt = 1.0 / 60.0;
         let contact_query = ncollide3d::pipeline::object::GeometricQueryType::Contacts(0.0, 0.0);
@@ -79,6 +80,11 @@ impl<'a> System<'a> for PhysicsSystem {
                         } else if asteroids.contains(entity2) {
                             ecs_utils.mark_for_removal(entity2);
                         }
+                    }
+
+                    if has_component(entity1, entity2, &missles) && has_component(entity1, entity2, &asteroids) {
+                        ecs_utils.mark_for_removal(entity1);
+                        ecs_utils.mark_for_removal(entity2);
                     }
                 }
                 ContactEvent::Stopped(_, _) => {}
@@ -138,6 +144,7 @@ pub struct Collider {
 impl Collider {
     pub const ASTEROID: usize = 0;
     pub const SHIP: usize = 1;
+    pub const MISSLE: usize = 2;
 }
 
 pub struct RaycastSystem {

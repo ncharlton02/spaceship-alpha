@@ -1,22 +1,16 @@
 use crate::graphics::{MeshId, MeshManager, ModelId};
-use crate::{block::Blocks, floor::Floors};
+use crate::{block::Blocks, floor::Floors, InputAction};
 use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
-pub use objects::{AsteroidMarker, ObjectMeshes};
+pub use objects::ObjectMeshes;
 pub use physics::{Collider, ColliderShape, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
-use specs::{
-    prelude::*,
-    shred::{Fetch, FetchMut},
-    storage::MaskedStorage,
-    Component,
-};
+use specs::{prelude::*, shred::Fetch, storage::MaskedStorage, Component};
 
 pub mod objects;
 pub mod physics;
 pub mod ship;
 
 pub type SimpleStorage<'a, T> = Storage<'a, T, Fetch<'a, MaskedStorage<T>>>;
-pub type SimpleMutStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
 
 pub struct Model {
     pub mesh_id: MeshId,
@@ -108,12 +102,14 @@ impl<'a> ECS<'a> {
         world.register::<Transform>();
         world.register::<RigidBody>();
         world.register::<Collider>();
-        world.register::<AsteroidMarker>();
         world.insert(EcsUtils::default());
         world.insert(meshes);
         world.insert(mesh_manager);
         world.insert(blocks);
         world.insert(floors);
+        world.insert(InputAction::None);
+        objects::register_components(&mut world);
+        crate::block::register_components(&mut world);
 
         let model_update_system = {
             let transform_reader = world.write_storage::<Transform>().register_reader();
@@ -126,7 +122,11 @@ impl<'a> ECS<'a> {
             }
         };
 
-        let dispatcher = DispatcherBuilder::new()
+        let mut dispatcher_builder = DispatcherBuilder::new();
+        crate::block::setup_systems(&mut dispatcher_builder);
+        objects::setup_systems(&mut dispatcher_builder);
+        dispatcher_builder.add_barrier();
+        let dispatcher = dispatcher_builder
             .with(physics::PhysicsSystem, "physics_system", &[])
             .with(model_update_system, "update_models", &["physics_system"])
             .build();
@@ -135,6 +135,10 @@ impl<'a> ECS<'a> {
         objects::create_asteroid(&mut world);
 
         ECS { world, dispatcher }
+    }
+
+    pub fn set_input_action(&mut self, action: InputAction) {
+        self.world.insert(action);
     }
 
     pub fn update(&mut self) {
@@ -169,6 +173,7 @@ impl<'a> ECS<'a> {
         self.world.maintain();
     }
 
+    #[allow(dead_code)]
     pub fn mark_for_removal(&mut self, entity: Entity) {
         self.world
             .get_mut::<EcsUtils>()
@@ -186,6 +191,7 @@ impl EcsUtils {
     /// Marks an entity to be removed at the end of the update.
     /// This should be used over world.delete() because this will delete
     /// the model from the renderer
+    #[allow(dead_code)]
     pub fn mark_for_removal(&mut self, entity: Entity) {
         if !self.to_be_removed.contains(&entity) {
             self.to_be_removed.push(entity);
@@ -195,9 +201,9 @@ impl EcsUtils {
 
 /// Represents an entity's position, rotation, and scale within space.
 pub struct Transform {
-    position: Vector3<f32>,
-    rotation: Quaternion<f32>,
-    scale: Point3<f32>,
+    pub position: Vector3<f32>,
+    pub rotation: Quaternion<f32>,
+    pub scale: Point3<f32>,
 }
 
 impl Component for Transform {
@@ -211,6 +217,10 @@ impl Transform {
             scale: Point3::new(1.0, 1.0, 1.0),
             rotation: Quaternion::from_angle_z(cgmath::Rad(0.0)),
         }
+    }
+
+    pub fn set_rotation_z(&mut self, theta: f32) {
+        self.rotation = Quaternion::from_angle_z(cgmath::Rad(theta));
     }
 
     fn as_matrix(&self) -> Matrix4<f32> {

@@ -4,11 +4,12 @@ extern crate lazy_static;
 use cgmath::{prelude::*, Point2, Vector3};
 use entity::{Collider, ECS};
 use graphics::{Camera, MeshManager, Renderer};
-use specs::RunNow;
+use specs::{Entity, RunNow};
 use std::collections::HashSet;
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = false;
+pub const PI: f32 = std::f32::consts::PI;
 
 mod app;
 mod block;
@@ -108,25 +109,37 @@ impl<'a> app::Application for AppState<'a> {
 
     fn mouse_moved(&mut self, _: Point2<f32>) {}
 
-    fn click_event(&mut self, _: event::MouseButton, state: event::ElementState, pt: Point2<f32>) {
-        if state != event::ElementState::Pressed {
+    fn click_event(
+        &mut self,
+        button: event::MouseButton,
+        state: event::ElementState,
+        pt: Point2<f32>,
+    ) {
+        if button != event::MouseButton::Left {
             return;
         }
 
-        let near = self
-            .camera
-            .unproject(Vector3::new(pt.x, pt.y, 0.0), self.window_size);
-        let far = self
-            .camera
-            .unproject(Vector3::new(pt.x, pt.y, 1.0), self.window_size);
+        match state {
+            event::ElementState::Pressed => {
+                let near = self
+                    .camera
+                    .unproject(Vector3::new(pt.x, pt.y, 0.0), self.window_size);
+                let far = self
+                    .camera
+                    .unproject(Vector3::new(pt.x, pt.y, 1.0), self.window_size);
 
-        let mut raycast_system = entity::physics::RaycastSystem::new();
-        raycast_system.run_now(&mut self.ecs.world);
+                let mut raycast_system = entity::physics::RaycastSystem::new();
+                raycast_system.run_now(&self.ecs.world);
 
-        if let Some(asteroid) = raycast_system.raycast(vec![Collider::ASTEROID], near, far) {
-            self.ecs.mark_for_removal(asteroid);
-            entity::objects::create_asteroid(&mut self.ecs.world);
-            self.ecs.maintain();
+                let action = raycast_system
+                    .raycast(vec![Collider::ASTEROID], near, far)
+                    .map_or_else(|| InputAction::None, InputAction::Mining);
+
+                self.ecs.set_input_action(action);
+            }
+            event::ElementState::Released => {
+                self.ecs.set_input_action(InputAction::None);
+            }
         }
     }
 
@@ -169,4 +182,9 @@ pub fn print_time(title: &str) {
         % 1000;
 
     println!("{}: {}", title, time_ms);
+}
+
+pub enum InputAction {
+    Mining(Entity),
+    None,
 }
