@@ -55,15 +55,15 @@ pub fn execute_build_actions(world: &mut World, ship: Entity, actions: &[BuildAc
                         pos.y as f32,
                         block.height / 2.0,
                     ))
-                    .with(Collider {
-                        shape: ColliderShape::Cuboid(Vector3::new(
+                    .with(Collider::new(
+                        ColliderShape::Cuboid(Vector3::new(
                             block.size.x as f32,
                             block.size.y as f32,
                             block.height,
                         )),
-                        group: Collider::SHIP,
-                        whitelist: vec![Collider::ASTEROID],
-                    });
+                        Collider::SHIP,
+                        vec![Collider::ASTEROID],
+                    ));
                 let block_entity = if let Some(setup) = block.setup {
                     (setup)(entity_builder).build()
                 } else {
@@ -147,6 +147,8 @@ fn build_initial_ship(world: &World) -> Vec<BuildAction> {
         Point2::new(-1, size / 2),
         blocks.miner,
     ));
+
+    actions.push(BuildAction::BuildBlock(Point2::new(-2, -2), blocks.laser));
     actions.push(BuildAction::BuildBlock(
         Point2::new(size + 1, size + 2),
         blocks.engine,

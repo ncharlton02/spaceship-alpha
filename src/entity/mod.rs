@@ -2,7 +2,7 @@ use crate::graphics::{MeshId, MeshManager, ModelId};
 use crate::{block::Blocks, floor::Floors, InputAction};
 use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
 pub use objects::ObjectMeshes;
-pub use physics::{Collider, ColliderShape, RigidBody};
+pub use physics::{Collider, ColliderShape, RaycastWorld, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
 use specs::{prelude::*, shred::Fetch, storage::MaskedStorage, Component};
 
@@ -102,11 +102,13 @@ impl<'a> ECS<'a> {
         world.register::<Transform>();
         world.register::<RigidBody>();
         world.register::<Collider>();
+        world.register::<Line>();
         world.insert(EcsUtils::default());
         world.insert(meshes);
         world.insert(mesh_manager);
         world.insert(blocks);
         world.insert(floors);
+        world.insert(RaycastWorld::new());
         world.insert(InputAction::None);
         objects::register_components(&mut world);
         crate::block::register_components(&mut world);
@@ -128,7 +130,12 @@ impl<'a> ECS<'a> {
         dispatcher_builder.add_barrier();
         let dispatcher = dispatcher_builder
             .with(physics::PhysicsSystem, "physics_system", &[])
-            .with(model_update_system, "update_models", &["physics_system"])
+            .with(
+                physics::RaycastSystem,
+                "raycast_system",
+                &["physics_system"],
+            )
+            .with(model_update_system, "update_models", &["raycast_system"])
             .build();
 
         ship::create_ship(&mut world);
@@ -166,6 +173,8 @@ impl<'a> ECS<'a> {
                     .entities()
                     .delete(*entity)
                     .expect("Unable to delete entity marked for removal");
+
+                panic!("TODO: Delete entity from collision world!!");
             }
             ecs_utils.to_be_removed.clear();
         }
@@ -179,6 +188,17 @@ impl<'a> ECS<'a> {
             .get_mut::<EcsUtils>()
             .unwrap()
             .mark_for_removal(entity);
+    }
+
+    pub fn raycast(
+        &self,
+        whitelist: Vec<usize>,
+        near: Vector3<f32>,
+        far: Vector3<f32>,
+    ) -> Option<Entity> {
+        self.world
+            .fetch::<RaycastWorld>()
+            .raycast(whitelist, near, far)
     }
 }
 
@@ -229,3 +249,16 @@ impl Transform {
             * Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z)
     }
 }
+
+/// TODO: Create seperate lines for component and GPU
+/// and then add a 'visible' flag here
+#[derive(Clone, Copy, Component)]
+#[storage(HashMapStorage)]
+pub struct Line {
+    pub pt: Vector3<f32>,
+    pub pt2: Vector3<f32>,
+    pub color: Vector3<f32>,
+}
+
+unsafe impl bytemuck::Pod for Line {}
+unsafe impl bytemuck::Zeroable for Line {}

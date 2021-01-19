@@ -4,7 +4,7 @@ extern crate lazy_static;
 use cgmath::{prelude::*, Point2, Vector3};
 use entity::{Collider, ECS};
 use graphics::{Camera, MeshManager, Renderer};
-use specs::{Entity, RunNow};
+use specs::prelude::*;
 use std::collections::HashSet;
 use winit::event;
 
@@ -17,15 +17,16 @@ mod entity;
 mod floor;
 mod graphics;
 
-struct AppState<'a: 'static> {
+struct AppState {
     renderer: Renderer,
     camera: Camera,
-    ecs: entity::ECS<'a>,
+    ecs: entity::ECS<'static>,
     keys: Keys,
     window_size: Point2<f32>,
+    left_click: Option<Point2<f32>>,
 }
 
-impl AppState<'_> {
+impl AppState {
     fn update_camera(&mut self) {
         let rotate_speed = 0.02;
         let move_speed = 0.16;
@@ -58,7 +59,7 @@ impl AppState<'_> {
     }
 }
 
-impl<'a> app::Application for AppState<'a> {
+impl app::Application for AppState {
     fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, _: &wgpu::Queue) -> Self {
         let mut mesh_manager = MeshManager::new();
         let renderer = Renderer::new(device, &swapchain);
@@ -84,6 +85,7 @@ impl<'a> app::Application for AppState<'a> {
             ecs,
             keys,
             window_size,
+            left_click: None,
         }
     }
 
@@ -107,7 +109,11 @@ impl<'a> app::Application for AppState<'a> {
 
     fn scroll_event(&mut self, _: f32) {}
 
-    fn mouse_moved(&mut self, _: Point2<f32>) {}
+    fn mouse_moved(&mut self, new_pos: Point2<f32>) {
+        if let Some(left_click) = &mut self.left_click {
+            *left_click = new_pos;
+        }
+    }
 
     fn click_event(
         &mut self,
@@ -121,23 +127,10 @@ impl<'a> app::Application for AppState<'a> {
 
         match state {
             event::ElementState::Pressed => {
-                let near = self
-                    .camera
-                    .unproject(Vector3::new(pt.x, pt.y, 0.0), self.window_size);
-                let far = self
-                    .camera
-                    .unproject(Vector3::new(pt.x, pt.y, 1.0), self.window_size);
-
-                let mut raycast_system = entity::physics::RaycastSystem::new();
-                raycast_system.run_now(&self.ecs.world);
-
-                let action = raycast_system
-                    .raycast(vec![Collider::ASTEROID], near, far)
-                    .map_or_else(|| InputAction::None, InputAction::Mining);
-
-                self.ecs.set_input_action(action);
+                self.left_click = Some(pt);
             }
             event::ElementState::Released => {
+                self.left_click = None;
                 self.ecs.set_input_action(InputAction::None);
             }
         }
@@ -146,6 +139,26 @@ impl<'a> app::Application for AppState<'a> {
     fn fixed_update(&mut self, _: &wgpu::Device, _: &wgpu::Queue) {
         self.update_camera();
         self.ecs.update();
+
+        let pt = if let Some(pt) = self.left_click {
+            pt
+        } else {
+            return;
+        };
+
+        let near = self
+            .camera
+            .unproject(Vector3::new(pt.x, pt.y, 0.0), self.window_size);
+        let far = self
+            .camera
+            .unproject(Vector3::new(pt.x, pt.y, 1.0), self.window_size);
+
+        let action = match self.ecs.raycast(vec![Collider::ASTEROID], near, far) {
+            Some(entity) => InputAction::Laser(entity),
+            None => InputAction::None,
+        };
+
+        self.ecs.set_input_action(action);
     }
 
     fn render(
@@ -154,9 +167,23 @@ impl<'a> app::Application for AppState<'a> {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) {
+        let mut lines = Vec::new();
+        let lines_comps = self.ecs.world.read_component::<entity::Line>();
+        let entities = self.ecs.world.fetch::<specs::world::EntitiesRes>();
+
+        for (line, _) in (&lines_comps, &entities).join() {
+            lines.push(*line);
+        }
+
         let mut mesh_manager = self.ecs.world.fetch_mut::<MeshManager>();
-        self.renderer
-            .render(device, queue, texture, &self.camera, &mut mesh_manager)
+        self.renderer.render(
+            device,
+            queue,
+            texture,
+            &self.camera,
+            &mut mesh_manager,
+            &lines,
+        )
     }
 }
 
@@ -186,5 +213,6 @@ pub fn print_time(title: &str) {
 
 pub enum InputAction {
     Mining(Entity),
+    Laser(Entity),
     None,
 }

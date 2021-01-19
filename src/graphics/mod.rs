@@ -1,10 +1,13 @@
+use crate::entity::Line;
 use cgmath::{prelude::*, Matrix4, Point2, Point3, Vector3, Vector4};
 use generational_arena::Arena;
 use std::mem;
 use wgpu::util::DeviceExt;
 
+pub use line::*;
 pub use obj::*;
 
+mod line;
 mod obj;
 
 pub struct Mesh {
@@ -218,6 +221,7 @@ pub struct Renderer {
     camera_bg: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     depth_texture: GPUTexture,
+    line_renderer: LineRenderer,
 }
 
 impl Renderer {
@@ -266,7 +270,7 @@ impl Renderer {
         let depth_texture = create_depth_texture(device, swapchain);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
+            label: Some("Std Pipeline Layout"),
             bind_group_layouts: &[&camera_bgl],
             push_constant_ranges: &[],
         });
@@ -324,11 +328,14 @@ impl Renderer {
             alpha_to_coverage_enabled: false,
         });
 
+        let line_renderer = LineRenderer::new(device, &camera_bgl, swapchain);
+
         Renderer {
             pipeline,
             camera_bg,
             camera_buffer,
             depth_texture,
+            line_renderer,
         }
     }
 
@@ -339,7 +346,13 @@ impl Renderer {
         frame: &wgpu::SwapChainTexture,
         camera: &Camera,
         mesh_manager: &mut MeshManager,
+        lines: &[Line],
     ) {
+        queue.write_buffer(
+            &self.line_renderer.vertex_buffer,
+            0,
+            bytemuck::cast_slice(lines),
+        );
         mesh_manager.push_meshes_to_gpu(queue);
         queue.write_buffer(
             &self.camera_buffer,
@@ -382,6 +395,10 @@ impl Renderer {
             rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             rpass.draw_indexed(0..mesh.index_count, 0, 0..mesh.instances);
         }
+
+        rpass.set_pipeline(&self.line_renderer.pipeline);
+        rpass.set_vertex_buffer(0, self.line_renderer.vertex_buffer.slice(..));
+        rpass.draw(0..2, 0..lines.len() as u32);
 
         std::mem::drop(rpass);
         queue.submit(Some(encoder.finish()));

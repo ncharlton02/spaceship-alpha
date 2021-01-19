@@ -6,7 +6,10 @@ use nalgebra::{
     geometry::{Isometry3, Quaternion, Translation3, UnitQuaternion},
 };
 use ncollide3d::{
-    pipeline::narrow_phase::ContactEvent, pipeline::object::CollisionGroups, query::Ray, shape,
+    pipeline::narrow_phase::ContactEvent,
+    pipeline::object::{CollisionGroups, CollisionObjectSlabHandle},
+    query::Ray,
+    shape,
     world::CollisionWorld,
 };
 use specs::{prelude::*, Component};
@@ -17,8 +20,6 @@ pub struct RigidBody {
     pub velocity: Vector3<f32>,
 }
 
-//TODO: (Optimization) Have the CollisionWorld be a resource
-//so that it can be used by other physics systems (Raycast)
 pub struct PhysicsSystem;
 
 impl<'a> System<'a> for PhysicsSystem {
@@ -34,7 +35,16 @@ impl<'a> System<'a> for PhysicsSystem {
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, mut ecs_utils, mut transforms, colliders, bodies, blocks, asteroids, missles) = data;
+        let (
+            entities,
+            mut ecs_utils,
+            mut transforms,
+            colliders,
+            bodies,
+            blocks,
+            asteroids,
+            missles,
+        ) = data;
         let mut world: CollisionWorld<f32, Entity> = CollisionWorld::new(0.02);
         let dt = 1.0 / 60.0;
         let contact_query = ncollide3d::pipeline::object::GeometricQueryType::Contacts(0.0, 0.0);
@@ -82,7 +92,9 @@ impl<'a> System<'a> for PhysicsSystem {
                         }
                     }
 
-                    if has_component(entity1, entity2, &missles) && has_component(entity1, entity2, &asteroids) {
+                    if has_component(entity1, entity2, &missles)
+                        && has_component(entity1, entity2, &asteroids)
+                    {
                         ecs_utils.mark_for_removal(entity1);
                         ecs_utils.mark_for_removal(entity2);
                     }
@@ -139,21 +151,32 @@ pub struct Collider {
     pub shape: ColliderShape,
     pub group: usize,
     pub whitelist: Vec<usize>,
+    raycast_id: Option<CollisionObjectSlabHandle>,
 }
 
 impl Collider {
-    pub const ASTEROID: usize = 0;
-    pub const SHIP: usize = 1;
-    pub const MISSLE: usize = 2;
+    /// Internal Use Only. Used to prevent Raycast colliders
+    /// from self interacting.
+    const RAYCAST: usize = 0;
+    pub const ASTEROID: usize = 1;
+    pub const SHIP: usize = 2;
+    pub const MISSLE: usize = 3;
+
+    pub fn new(shape: ColliderShape, group: usize, whitelist: Vec<usize>) -> Self {
+        Self {
+            shape,
+            group,
+            whitelist,
+            raycast_id: None,
+        }
+    }
 }
 
-pub struct RaycastSystem {
-    world: Option<CollisionWorld<f32, Entity>>,
-}
+pub struct RaycastWorld(CollisionWorld<f32, Entity>);
 
-impl RaycastSystem {
+impl RaycastWorld {
     pub fn new() -> Self {
-        Self { world: None }
+        Self(CollisionWorld::new(0.02))
     }
 
     pub fn raycast(
@@ -168,40 +191,50 @@ impl RaycastSystem {
         let toi = 500.0; //TODO: Decide a good time of impact (currently just a big number)
         let groups = CollisionGroups::new().with_whitelist(&whitelist);
 
-        self.world
-            .as_ref()
-            .expect("System must be executed before raycasts can be performed!")
+        self.0
             .first_interference_with_ray(&ray, toi, &groups)
             .map(|result| *result.co.data())
     }
 }
 
+pub struct RaycastSystem;
+
 impl<'a> System<'a> for RaycastSystem {
     type SystemData = (
         Entities<'a>,
+        WriteExpect<'a, RaycastWorld>,
         ReadStorage<'a, Transform>,
-        ReadStorage<'a, Collider>,
+        WriteStorage<'a, Collider>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        if self.world.is_some() {
-            panic!("Raycast System already executed!");
-        }
-
-        let (entities, transforms, colliders) = data;
-        let mut world: CollisionWorld<f32, Entity> = CollisionWorld::new(0.02);
+        let (entities, mut world, transforms, mut colliders) = data;
+        let world = &mut world.0;
         let contact_query = ncollide3d::pipeline::object::GeometricQueryType::Contacts(0.8, 0.8);
 
-        for (entity, transform, collider) in (&entities, &transforms, &colliders).join() {
+        for (entity, transform, mut colliders) in
+            (&entities, &transforms, &mut colliders.restrict_mut()).join()
+        {
             let position = to_nalgebra_pos(&transform);
-            let shape = collider.shape.as_shape_handle();
-            let group = ncollide3d::pipeline::object::CollisionGroups::new()
-                .with_membership(&[collider.group]);
 
-            world.add(position, shape, group, contact_query, entity);
+            // Safety: We can use get_unchecked here because we know the entity is alive
+            // from joining the Entities resource
+            if let Some(id) = colliders.get_unchecked().raycast_id {
+                let collider_object = world
+                    .get_mut(id)
+                    .expect("Raycast ID does not exist in collision world!");
+                collider_object.set_position(position);
+            } else {
+                let collider = colliders.get_mut_unchecked();
+                let shape = collider.shape.as_shape_handle();
+                let group = ncollide3d::pipeline::object::CollisionGroups::new()
+                    .with_membership(&[collider.group])
+                    .with_whitelist(&[Collider::RAYCAST]);
+
+                collider.raycast_id =
+                    Some(world.add(position, shape, group, contact_query, entity).0);
+            }
         }
         world.update();
-
-        self.world = Some(world);
     }
 }

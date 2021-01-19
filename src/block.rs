@@ -1,6 +1,6 @@
 use crate::entity::{
     objects::{self, ObjectMeshes},
-    Transform,
+    Line, Transform,
 };
 use crate::graphics::{self, MeshId, MeshManager};
 use crate::InputAction;
@@ -10,6 +10,7 @@ use specs::{prelude::*, world::LazyBuilder, Component};
 pub type BlockId = usize;
 pub type OnBlockSetup = fn(LazyBuilder) -> LazyBuilder;
 
+// TODO: Currently size is used for collision and grid spaces (but they should seperate)
 pub struct Block {
     pub id: BlockId,
     pub type_name: &'static str,
@@ -27,6 +28,7 @@ pub struct Blocks {
     pub engine: BlockId,
     pub cube: BlockId,
     pub miner: BlockId,
+    pub laser: BlockId,
 }
 
 impl Blocks {
@@ -67,6 +69,13 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "Miner",
         Some(setup_miner),
     );
+    let laser = create_block(
+        &mut blocks,
+        mesh_manager.add(device, &graphics::load_mesh("laser")),
+        (1, 1, 1.0),
+        "Laser",
+        Some(setup_laser),
+    );
 
     Blocks {
         blocks,
@@ -74,6 +83,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         engine,
         cube,
         miner,
+        laser,
     }
 }
 
@@ -101,14 +111,15 @@ fn create_block(
 
 pub fn register_components(world: &mut World) {
     world.register::<Miner>();
+    world.register::<Laser>();
 }
 
 pub fn setup_systems(dispatcher: &mut DispatcherBuilder) {
     dispatcher.add(MinerSystem, "", &[]);
+    dispatcher.add(LaserSystem, "", &[]);
 }
 
 fn setup_miner(builder: LazyBuilder) -> LazyBuilder {
-    println!("Building Miner!");
     builder.with(Miner::default())
 }
 
@@ -149,6 +160,48 @@ impl<'a> System<'a> for MinerSystem {
                 }
             } else {
                 miner.shoot_time += 1;
+            }
+        }
+    }
+}
+
+fn setup_laser(builder: LazyBuilder) -> LazyBuilder {
+    builder.with(Laser)
+}
+
+#[derive(Component)]
+#[storage(HashMapStorage)]
+pub struct Laser;
+
+pub struct LaserSystem;
+
+impl<'a> System<'a> for LaserSystem {
+    type SystemData = (
+        Entities<'a>,
+        ReadExpect<'a, InputAction>,
+        WriteStorage<'a, Laser>,
+        WriteStorage<'a, Line>,
+        ReadStorage<'a, Transform>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (entities, input, lasers, mut lines, transforms) = data;
+
+        for (entity, transform, _) in (&entities, &transforms, &lasers).join() {
+            if let InputAction::Laser(target) = *input {
+                let target_pos = transforms.get(target).unwrap().position;
+                lines
+                    .insert(
+                        entity,
+                        Line {
+                            pt: transform.position + Vector3::new(0.0, 0.0, 1.0),
+                            pt2: target_pos,
+                            color: Vector3::new(1.0, 0.0, 0.0),
+                        },
+                    )
+                    .expect("Unable to set line component for laser!");
+            } else {
+                lines.remove(entity);
             }
         }
     }

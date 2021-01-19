@@ -1,6 +1,6 @@
 use super::{
     physics::{Collider, ColliderShape, RigidBody},
-    Model, Transform, EcsUtils,
+    EcsUtils, Model, Transform,
 };
 use crate::graphics::{MeshId, MeshManager};
 use cgmath::{prelude::*, Vector3};
@@ -46,11 +46,11 @@ pub fn create_asteroid(world: &mut World) {
         .with(RigidBody {
             velocity: Vector3::new(1.0, 0.0, 0.0),
         })
-        .with(Collider {
-            shape: ColliderShape::Sphere(0.7),
-            group: Collider::ASTEROID,
-            whitelist: vec![Collider::SHIP, Collider::MISSLE],
-        })
+        .with(Collider::new(
+            ColliderShape::Sphere(0.7),
+            Collider::ASTEROID,
+            vec![Collider::SHIP, Collider::MISSLE],
+        ))
         .with(AsteroidMarker)
         .build();
 }
@@ -77,11 +77,11 @@ pub fn build_mining_missle(
         .with(RigidBody {
             velocity: Vector3::new(0.0, 0.0, MiningMissle::SPEED),
         })
-        .with(Collider {
-            shape: ColliderShape::Sphere(0.20),
-            group: Collider::MISSLE,
-            whitelist: vec![Collider::ASTEROID],
-        })
+        .with(Collider::new(
+            ColliderShape::Sphere(0.2),
+            Collider::MISSLE,
+            vec![Collider::ASTEROID],
+        ))
         .with(MiningMissle { target })
         .build();
 }
@@ -118,12 +118,15 @@ impl<'a> System<'a> for MiningMissleSystem {
                 .normalize()
                     * MiningMissle::SPEED;
             } else if missle_pos.z >= target_pos.z - 1.0 {
-                let mut z_factor = 1.0 - (target_pos.z - missle_pos.z).powf(2.0);
+                let z_factor = 1.0 - (target_pos.z - missle_pos.z).powf(2.0);
                 let mut velocity = Vector3::new(
-                    (target_pos.x - missle_pos.x),
-                    (target_pos.y - missle_pos.y),
-                    0.0
-                ).normalize() * z_factor * MiningMissle::SPEED;
+                    target_pos.x - missle_pos.x,
+                    target_pos.y - missle_pos.y,
+                    0.0,
+                )
+                .normalize()
+                    * z_factor
+                    * MiningMissle::SPEED;
                 velocity.z = MiningMissle::SPEED * (1.0 - z_factor).max(0.4);
                 rigid_bodies.get_mut(entity).unwrap().velocity = velocity;
             }
