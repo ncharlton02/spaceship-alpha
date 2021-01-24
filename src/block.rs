@@ -1,10 +1,10 @@
 use crate::entity::{
-    objects::{self, ObjectMeshes},
-    Line, Transform,
+    objects::{self, Health, ObjectMeshes},
+    Line, RaycastWorld, Transform,
 };
 use crate::graphics::{self, MeshId, MeshManager};
 use crate::InputAction;
-use cgmath::{Point2, Vector3};
+use cgmath::{prelude::*, Point2, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
 
 pub type BlockId = usize;
@@ -179,30 +179,49 @@ impl<'a> System<'a> for LaserSystem {
     type SystemData = (
         Entities<'a>,
         ReadExpect<'a, InputAction>,
+        ReadExpect<'a, RaycastWorld>,
         WriteStorage<'a, Laser>,
         WriteStorage<'a, Line>,
-        ReadStorage<'a, Transform>,
+        WriteStorage<'a, Health>,
+        WriteStorage<'a, Transform>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, input, lasers, mut lines, transforms) = data;
+        let (entities, input, raycaster, lasers, mut lines, mut healths, mut transforms) = data;
 
-        for (entity, transform, _) in (&entities, &transforms, &lasers).join() {
+        for (entity, _) in (&entities, &lasers).join() {
             if let InputAction::Laser(target) = *input {
                 let target_pos = transforms.get(target).unwrap().position;
-                lines
-                    .insert(
-                        entity,
-                        Line {
-                            pt: transform.position + Vector3::new(0.0, 0.0, 1.0),
-                            pt2: target_pos,
-                            color: Vector3::new(1.0, 0.0, 0.0),
-                        },
-                    )
-                    .expect("Unable to set line component for laser!");
-            } else {
-                lines.remove(entity);
+                let transform = transforms.get_mut(entity).unwrap();
+                let start_pos = transform.position + Vector3::new(-0.375, 0.0, 1.0/*0.3*/);
+
+                let raycast = raycaster.raycast(Vec::with_capacity(0), start_pos, target_pos);
+
+                if Some(target) == raycast {
+                    // TODO: Make this rotate!
+                    // let angle = start_pos.truncate().angle(target_pos.truncate());
+                    // transform.set_rotation_z(angle.0);
+
+                    lines
+                        .insert(
+                            entity,
+                            Line {
+                                pt: transform.position,
+                                pt2: target_pos,
+                                color: Vector3::new(1.0, 0.0, 0.0),
+                            },
+                        )
+                        .expect("Unable to set line component for laser!");
+
+                    if let Some(health) = healths.get_mut(target) {
+                        health.damage(1);
+                    }
+
+                    continue;
+                }
             }
+
+            lines.remove(entity);
         }
     }
 }
