@@ -30,7 +30,7 @@ impl<'a> System<'a> for PhysicsSystem {
         ReadStorage<'a, Collider>,
         ReadStorage<'a, RigidBody>,
         ReadStorage<'a, super::BlockEntity>,
-        ReadStorage<'a, super::objects::AsteroidMarker>,
+        ReadStorage<'a, super::objects::Asteroid>,
         ReadStorage<'a, super::objects::MiningMissle>,
     );
 
@@ -179,6 +179,15 @@ impl RaycastWorld {
         Self(CollisionWorld::new(0.02))
     }
 
+    pub fn remove(&mut self, collider: &mut Collider) {
+        if let Some(id) = collider.raycast_id {
+            self.0.remove(&[id]);
+            collider.raycast_id = None;
+        }
+    }
+
+    /// Note: If the whitelist is empty,
+    /// then the whitelist is set to ALL groups.
     pub fn raycast(
         &self,
         whitelist: Vec<usize>,
@@ -189,7 +198,11 @@ impl RaycastWorld {
         let dir = NVector3::new(far.x - near.x, far.y - near.y, far.z - near.z).normalize();
         let ray = Ray::new(origin, dir);
         let toi = 500.0; //TODO: Decide a good time of impact (currently just a big number)
-        let groups = CollisionGroups::new().with_whitelist(&whitelist);
+        let mut groups = CollisionGroups::new();
+
+        if !whitelist.is_empty() {
+            groups.set_whitelist(&whitelist);
+        }
 
         self.0
             .first_interference_with_ray(&ray, toi, &groups)
@@ -215,15 +228,17 @@ impl<'a> System<'a> for RaycastSystem {
         for (entity, transform, mut colliders) in
             (&entities, &transforms, &mut colliders.restrict_mut()).join()
         {
-            let position = to_nalgebra_pos(&transform);
-
             // Safety: We can use get_unchecked here because we know the entity is alive
             // from joining the Entities resource
-            if let Some(id) = colliders.get_unchecked().raycast_id {
+            let collider = colliders.get_unchecked();
+            let position = to_nalgebra_pos(&transform);
+
+            if let Some(id) = collider.raycast_id {
                 let collider_object = world
                     .get_mut(id)
                     .expect("Raycast ID does not exist in collision world!");
                 collider_object.set_position(position);
+                collider_object.set_shape(collider.shape.as_shape_handle());
             } else {
                 let collider = colliders.get_mut_unchecked();
                 let shape = collider.shape.as_shape_handle();

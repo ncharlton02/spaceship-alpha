@@ -24,24 +24,60 @@ impl ObjectMeshes {
 }
 
 pub fn register_components(world: &mut World) {
-    world.register::<AsteroidMarker>();
+    world.register::<Asteroid>();
+    world.register::<Health>();
     world.register::<MiningMissle>();
 }
 
 pub fn setup_systems(builder: &mut DispatcherBuilder) {
     builder.add(MiningMissleSystem, "", &[]);
+    builder.add(NoMoreHealthSystem, "", &[]);
 }
 
 #[derive(Component)]
 #[storage(HashMapStorage)]
-pub struct AsteroidMarker;
+pub struct Health(u32);
+
+impl Health {
+    pub fn damage(&mut self, amount: u32) {
+        self.0 -= amount.min(self.0);
+    }
+
+    pub fn health(&self) -> u32 {
+        self.0
+    }
+}
+
+pub struct NoMoreHealthSystem;
+
+impl<'a> System<'a> for NoMoreHealthSystem {
+    type SystemData = (Entities<'a>, Write<'a, EcsUtils>, ReadStorage<'a, Health>);
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (entities, mut ecs_utils, healths) = data;
+
+        for (entity, health) in (&entities, &healths).join() {
+            if health.health() == 0 {
+                ecs_utils.mark_for_removal(entity);
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+#[storage(HashMapStorage)]
+pub struct Asteroid;
+
+impl Asteroid {
+    pub const HEALTH: u32 = 180;
+}
 
 pub fn create_asteroid(world: &mut World) {
     let mesh = world.fetch::<ObjectMeshes>().asteroid;
 
     world
         .create_entity()
-        .with(Transform::from_position(-5.0, -5.0, 4.0))
+        .with(Transform::from_position(-5.0, -5.0, 5.0))
         .with(Model::new(mesh))
         .with(RigidBody {
             velocity: Vector3::new(1.0, 0.0, 0.0),
@@ -51,7 +87,8 @@ pub fn create_asteroid(world: &mut World) {
             Collider::ASTEROID,
             vec![Collider::SHIP, Collider::MISSLE],
         ))
-        .with(AsteroidMarker)
+        .with(Asteroid)
+        .with(Health(Asteroid::HEALTH))
         .build();
 }
 

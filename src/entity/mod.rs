@@ -155,8 +155,10 @@ impl<'a> ECS<'a> {
 
     pub fn maintain(&mut self) {
         {
+            // TODO: Convert this to a system that is executed at the end of an update (pre-physics / rendering)
             let mut ecs_utils = self.world.fetch_mut::<EcsUtils>();
             let mut mesh_manager = self.world.fetch_mut::<MeshManager>();
+            let mut raycast_world = self.world.fetch_mut::<RaycastWorld>();
 
             for entity in &ecs_utils.to_be_removed {
                 if let Some(mut model) = self
@@ -169,12 +171,16 @@ impl<'a> ECS<'a> {
                     model.model_id = None;
                 }
 
+                if let Some(mut collider) =
+                    self.world.write_component::<Collider>().get_mut(*entity)
+                {
+                    raycast_world.remove(&mut collider);
+                }
+
                 self.world
                     .entities()
                     .delete(*entity)
                     .expect("Unable to delete entity marked for removal");
-
-                panic!("TODO: Delete entity from collision world!!");
             }
             ecs_utils.to_be_removed.clear();
         }

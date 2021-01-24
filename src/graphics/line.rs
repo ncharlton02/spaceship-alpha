@@ -1,5 +1,4 @@
 use crate::entity::Line;
-use cgmath::{prelude::*, Point3, Vector3};
 use std::mem;
 
 pub struct LineRenderer {

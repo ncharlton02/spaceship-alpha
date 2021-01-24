@@ -148,7 +148,8 @@ fn build_initial_ship(world: &World) -> Vec<BuildAction> {
         blocks.miner,
     ));
 
-    actions.push(BuildAction::BuildBlock(Point2::new(-2, -2), blocks.laser));
+    actions.push(BuildAction::BuildBlock(Point2::new(-2, 2), blocks.laser));
+    actions.push(BuildAction::BuildBlock(Point2::new(10, 2), blocks.laser));
     actions.push(BuildAction::BuildBlock(
         Point2::new(size + 1, size + 2),
         blocks.engine,
