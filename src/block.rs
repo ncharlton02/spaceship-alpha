@@ -2,7 +2,7 @@ use crate::entity::{
     objects::{self, Health, ObjectMeshes},
     Line, RaycastWorld, Transform,
 };
-use crate::graphics::{self, MeshId, MeshManager};
+use crate::graphics::{self, MeshId, Mesh, MeshManager};
 use crate::InputAction;
 use cgmath::{prelude::*, Point2, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
@@ -41,37 +41,43 @@ impl Blocks {
 
 pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blocks {
     let mut blocks = Vec::new();
+    let mut register_mesh = |mesh: &Mesh| {
+        let id = mesh_manager.add(device, mesh);
+        mesh_manager.set_mesh_visisble(id, crate::RENDER_BLOCKS);
+        id
+    };
+
     let wall = create_block(
         &mut blocks,
-        mesh_manager.add(device, &graphics::load_mesh("wall")),
+        register_mesh(&graphics::load_mesh("wall")),
         (1, 1, 3.0),
         "wall",
         None,
     );
     let engine = create_block(
         &mut blocks,
-        mesh_manager.add(device, &graphics::load_mesh("engine")),
+        register_mesh(&graphics::load_mesh("engine")),
         (1, 1, 1.0),
         "engine",
         None,
     );
     let cube = create_block(
         &mut blocks,
-        mesh_manager.add(device, &graphics::load_mesh("box")),
+        register_mesh(&graphics::load_mesh("box")),
         (1, 1, 1.0),
         "Box",
         None,
     );
     let miner = create_block(
         &mut blocks,
-        mesh_manager.add(device, &graphics::load_mesh("miner")),
+        register_mesh(&graphics::load_mesh("miner")),
         (1, 1, 1.0),
         "Miner",
         Some(setup_miner),
     );
     let laser = create_block(
         &mut blocks,
-        mesh_manager.add(device, &graphics::load_mesh("laser")),
+        register_mesh(&graphics::load_mesh("laser")),
         (1, 1, 1.0),
         "Laser",
         Some(setup_laser),

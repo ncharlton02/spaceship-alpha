@@ -9,6 +9,8 @@ use std::collections::HashSet;
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = false;
+pub const RENDER_HITBOXES: bool = false;
+pub const RENDER_BLOCKS: bool = true;
 pub const PI: f32 = std::f32::consts::PI;
 
 mod app;

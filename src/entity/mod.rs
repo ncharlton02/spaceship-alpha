@@ -95,6 +95,7 @@ impl<'a> ECS<'a> {
         floors: Floors,
     ) -> Self {
         let meshes = ObjectMeshes::load(device, &mut mesh_manager);
+        let hitbox_meshes = physics::HitboxMeshes::load(device, &mut mesh_manager);
         let mut world = World::new();
         world.register::<Model>();
         world.register::<Ship>();
@@ -105,6 +106,7 @@ impl<'a> ECS<'a> {
         world.register::<Line>();
         world.insert(EcsUtils::default());
         world.insert(meshes);
+        world.insert(hitbox_meshes);
         world.insert(mesh_manager);
         world.insert(blocks);
         world.insert(floors);
@@ -159,6 +161,7 @@ impl<'a> ECS<'a> {
             let mut ecs_utils = self.world.fetch_mut::<EcsUtils>();
             let mut mesh_manager = self.world.fetch_mut::<MeshManager>();
             let mut raycast_world = self.world.fetch_mut::<RaycastWorld>();
+            let hitbox_meshes = self.world.fetch::<physics::HitboxMeshes>();
 
             for entity in &ecs_utils.to_be_removed {
                 if let Some(mut model) = self
@@ -174,7 +177,7 @@ impl<'a> ECS<'a> {
                 if let Some(mut collider) =
                     self.world.write_component::<Collider>().get_mut(*entity)
                 {
-                    raycast_world.remove(&mut collider);
+                    raycast_world.remove(&mut collider, &mut mesh_manager, &hitbox_meshes);
                 }
 
                 self.world
@@ -226,6 +229,7 @@ impl EcsUtils {
 }
 
 /// Represents an entity's position, rotation, and scale within space.
+#[derive(Clone)]
 pub struct Transform {
     pub position: Vector3<f32>,
     pub rotation: Quaternion<f32>,

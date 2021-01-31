@@ -175,6 +175,13 @@ impl MeshManager {
             queue.write_buffer(&mesh.models_buffer, 0, bytemuck::cast_slice(&models));
         }
     }
+
+    pub fn set_mesh_visisble(&mut self, mesh_id: MeshId, visible: bool) {
+        self.meshes
+            .get_mut(mesh_id.0)
+            .unwrap_or_else(|| panic!("Invalid mesh ID: {}", mesh_id.0))
+            .visible = visible;
+    }
 }
 
 struct GPUMesh {
@@ -183,9 +190,11 @@ struct GPUMesh {
     index_count: u32,
     models_buffer: wgpu::Buffer,
     instances: u32,
+    visible: bool,
 }
 
 impl GPUMesh {
+    // TODO: Make model buffers resize
     const MODEL_COUNT: u64 = 512;
 
     fn create(device: &wgpu::Device, mesh: &Mesh, id: usize) -> GPUMesh {
@@ -212,6 +221,7 @@ impl GPUMesh {
             models_buffer,
             index_count: mesh.indices.len() as u32,
             instances: 0,
+            visible: true,
         }
     }
 }
@@ -389,12 +399,16 @@ impl Renderer {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.camera_bg, &[]);
 
-        for mesh in &mesh_manager.meshes {
-            rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            rpass.set_vertex_buffer(1, mesh.models_buffer.slice(..));
-            rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            rpass.draw_indexed(0..mesh.index_count, 0, 0..mesh.instances);
-        }
+        mesh_manager
+            .meshes
+            .iter()
+            .filter(|mesh| mesh.visible)
+            .for_each(|mesh| {
+                rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                rpass.set_vertex_buffer(1, mesh.models_buffer.slice(..));
+                rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                rpass.draw_indexed(0..mesh.index_count, 0, 0..mesh.instances);
+            });
 
         rpass.set_pipeline(&self.line_renderer.pipeline);
         rpass.set_vertex_buffer(0, self.line_renderer.vertex_buffer.slice(..));

@@ -1,5 +1,6 @@
 use super::{EcsUtils, SimpleStorage, Transform};
-use cgmath::Vector3;
+use crate::graphics::{Mesh, MeshId, MeshManager, ModelId, Vertex};
+use cgmath::{prelude::*, Matrix4, Point3, Vector3};
 use nalgebra::{
     base::Vector3 as NVector3,
     geometry::Point3 as NPoint3,
@@ -121,6 +122,7 @@ fn to_nalgebra_pos(transform: &Transform) -> Isometry3<f32> {
     Isometry3::from_parts(translation, rotation)
 }
 
+#[derive(Debug)]
 pub enum ColliderShape {
     /// The Full Size of the Box
     Cuboid(Vector3<f32>),
@@ -143,6 +145,27 @@ impl ColliderShape {
             ColliderShape::Sphere(radius) => ShapeHandle::new(Ball::new(*radius)),
         }
     }
+
+    pub fn to_hitbox_model(&self, transform: &Transform) -> Matrix4<f32> {
+        let mut transform = transform.clone();
+        match self {
+            ColliderShape::Cuboid(size) => {
+                transform.scale = Point3::from_vec(*size)
+            }
+            ColliderShape::Sphere(radius) => {
+                transform.scale = Point3::new(*radius, *radius, *radius);
+            }
+        }
+
+        transform.as_matrix()
+    }
+
+    pub fn to_hitbox_mesh(&self, meshes: &HitboxMeshes) -> MeshId {
+        match self {
+            ColliderShape::Cuboid(_) => meshes.unit_cube,
+            ColliderShape::Sphere(_) => meshes.unit_sphere,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -152,6 +175,7 @@ pub struct Collider {
     pub group: usize,
     pub whitelist: Vec<usize>,
     raycast_id: Option<CollisionObjectSlabHandle>,
+    model_id: Option<ModelId>,
 }
 
 impl Collider {
@@ -168,6 +192,7 @@ impl Collider {
             group,
             whitelist,
             raycast_id: None,
+            model_id: None,
         }
     }
 }
@@ -179,10 +204,19 @@ impl RaycastWorld {
         Self(CollisionWorld::new(0.02))
     }
 
-    pub fn remove(&mut self, collider: &mut Collider) {
+    pub fn remove(
+        &mut self,
+        collider: &mut Collider,
+        mesh_manager: &mut MeshManager,
+        meshes: &HitboxMeshes,
+    ) {
         if let Some(id) = collider.raycast_id {
             self.0.remove(&[id]);
             collider.raycast_id = None;
+        }
+
+        if let Some(id) = collider.model_id {
+            mesh_manager.remove_model(collider.shape.to_hitbox_mesh(meshes), id);
         }
     }
 
@@ -218,10 +252,12 @@ impl<'a> System<'a> for RaycastSystem {
         WriteExpect<'a, RaycastWorld>,
         ReadStorage<'a, Transform>,
         WriteStorage<'a, Collider>,
+        WriteExpect<'a, MeshManager>,
+        ReadExpect<'a, HitboxMeshes>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, mut world, transforms, mut colliders) = data;
+        let (entities, mut world, transforms, mut colliders, mut meshes, hitbox_meshes) = data;
         let world = &mut world.0;
         let contact_query = ncollide3d::pipeline::object::GeometricQueryType::Contacts(0.8, 0.8);
 
@@ -232,13 +268,16 @@ impl<'a> System<'a> for RaycastSystem {
             // from joining the Entities resource
             let collider = colliders.get_unchecked();
             let position = to_nalgebra_pos(&transform);
+            let hitbox_mesh = collider.shape.to_hitbox_mesh(&hitbox_meshes);
+            let hitbox_matrix = collider.shape.to_hitbox_model(&transform);
 
-            if let Some(id) = collider.raycast_id {
+            if let (Some(id), Some(model)) = (collider.raycast_id, collider.model_id) {
                 let collider_object = world
                     .get_mut(id)
                     .expect("Raycast ID does not exist in collision world!");
                 collider_object.set_position(position);
                 collider_object.set_shape(collider.shape.as_shape_handle());
+                meshes.update_model(hitbox_mesh, model, hitbox_matrix);
             } else {
                 let collider = colliders.get_mut_unchecked();
                 let shape = collider.shape.as_shape_handle();
@@ -248,8 +287,71 @@ impl<'a> System<'a> for RaycastSystem {
 
                 collider.raycast_id =
                     Some(world.add(position, shape, group, contact_query, entity).0);
+
+                // TODO: Rendering happens in the raycast update system? This either should be renamed
+                // or needs to happen in a different system.
+                collider.model_id = Some(meshes.new_model(hitbox_mesh, hitbox_matrix));
             }
         }
         world.update();
+    }
+}
+
+pub struct HitboxMeshes {
+    pub unit_cube: MeshId,
+    pub unit_sphere: MeshId,
+}
+
+impl HitboxMeshes {
+    pub fn load(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Self {
+        let mut register_mesh = |mesh: &Mesh| {
+            let id = mesh_manager.add(device, mesh);
+            mesh_manager.set_mesh_visisble(id, crate::RENDER_HITBOXES);
+            id
+        };
+        let unit_cube = Mesh::rectangular_prism(1.0, 1.0, 1.0, Point3::new(1.0, 0.0, 0.0));
+
+        Self {
+            unit_cube: register_mesh(&unit_cube),
+            unit_sphere: register_mesh(&create_sphere_mesh()),
+        }
+    }
+}
+
+fn create_sphere_mesh() -> Mesh {
+    let color = Point3::new(1.0, 0.0, 0.0);
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let slices = 10;
+    let chunks = 10;
+
+    for slice in 0..slices + 1 {
+        let slice_index = (chunks + 1) * slice;
+        let next_slice_index = (chunks + 1) * (slice + 1);
+        let (z_sin, z_cos) =
+            ((crate::PI / slices as f32 * slice as f32) - (crate::PI / 2.0)).sin_cos();
+
+        for chunk in 0..chunks + 1 {
+            let (xy_sin, xy_cos) = (crate::PI * 2.0 / chunks as f32 * chunk as f32).sin_cos();
+            let pos = Point3::new(z_cos * xy_cos, z_cos * xy_sin, z_sin);
+            vertices.push(Vertex {
+                normal: Point3::from_vec(pos.to_vec().normalize()),
+                color,
+                pos,
+            });
+
+            indices.push(slice_index + chunk);
+            indices.push(slice_index + chunk + 1);
+            indices.push(next_slice_index + chunk);
+            indices.push(next_slice_index + chunk);
+            indices.push(slice_index + chunk + 1);
+            indices.push(next_slice_index + chunk + 1);
+        }
+    }
+
+    Mesh {
+        name: "Unit Sphere".to_string(),
+        vertices,
+        indices,
     }
 }
