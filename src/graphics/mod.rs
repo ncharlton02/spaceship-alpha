@@ -231,6 +231,7 @@ pub struct Renderer {
     camera_bg: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     depth_texture: GPUTexture,
+    msaa_texture: GPUTexture,
     line_renderer: LineRenderer,
 }
 
@@ -278,6 +279,7 @@ impl Renderer {
         let frag_shader =
             device.create_shader_module(&wgpu::include_spirv!("../shaders/basic.frag.spv"));
         let depth_texture = create_depth_texture(device, swapchain);
+        let msaa_texture = create_msaa_texture(device, swapchain);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Std Pipeline Layout"),
@@ -333,7 +335,7 @@ impl Renderer {
                     attributes: &wgpu::vertex_attr_array![3 => Float4, 4 => Float4, 5 => Float4, 6 => Float4],
                 }],
             },
-            sample_count: 1,
+            sample_count: crate::MSAA_SAMPLE,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
         });
@@ -345,6 +347,7 @@ impl Renderer {
             camera_bg,
             camera_buffer,
             depth_texture,
+            msaa_texture,
             line_renderer,
         }
     }
@@ -375,8 +378,8 @@ impl Renderer {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &frame.view,
-                resolve_target: None,
+                attachment: &self.msaa_texture.view,
+                resolve_target: Some(&frame.view),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.001,
@@ -420,6 +423,7 @@ impl Renderer {
 
     pub fn resize(&mut self, device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) {
         self.depth_texture = create_depth_texture(device, swapchain);
+        self.msaa_texture = create_msaa_texture(device, swapchain);
     }
 }
 
@@ -439,10 +443,29 @@ fn create_depth_texture(
             depth: 1,
         },
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count: crate::MSAA_SAMPLE,
         dimension: wgpu::TextureDimension::D2,
         format: Renderer::DEPTH_FORMAT,
         usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    GPUTexture { view }
+}
+
+fn create_msaa_texture(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) -> GPUTexture {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("MSAA Texture"),
+        size: wgpu::Extent3d {
+            width: swapchain.width,
+            height: swapchain.height,
+            depth: 1,
+        },
+        mip_level_count: 1,
+        sample_count: crate::MSAA_SAMPLE,
+        dimension: wgpu::TextureDimension::D2,
+        format: swapchain.format,
+        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 

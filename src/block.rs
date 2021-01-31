@@ -2,7 +2,7 @@ use crate::entity::{
     objects::{self, Health, ObjectMeshes},
     Line, RaycastWorld, Transform,
 };
-use crate::graphics::{self, MeshId, Mesh, MeshManager};
+use crate::graphics::{self, Mesh, MeshId, MeshManager};
 use crate::InputAction;
 use cgmath::{prelude::*, Point2, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};

@@ -70,7 +70,7 @@ impl LineRenderer {
                     attributes: &wgpu::vertex_attr_array![0 => Float3, 1 => Float3, 2 => Float3],
                 }],
             },
-            sample_count: 1,
+            sample_count: crate::MSAA_SAMPLE,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
         });

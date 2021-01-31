@@ -149,9 +149,7 @@ impl ColliderShape {
     pub fn to_hitbox_model(&self, transform: &Transform) -> Matrix4<f32> {
         let mut transform = transform.clone();
         match self {
-            ColliderShape::Cuboid(size) => {
-                transform.scale = Point3::from_vec(*size)
-            }
+            ColliderShape::Cuboid(size) => transform.scale = Point3::from_vec(*size),
             ColliderShape::Sphere(radius) => {
                 transform.scale = Point3::new(*radius, *radius, *radius);
             }
