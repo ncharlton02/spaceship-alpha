@@ -2,7 +2,7 @@ use crate::graphics::{MeshId, MeshManager, ModelId};
 use crate::{block::Blocks, floor::Floors, InputAction};
 use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
 pub use objects::ObjectMeshes;
-pub use physics::{Collider, ColliderShape, RaycastWorld, RigidBody};
+pub use physics::{Collider, ColliderShape, Hitbox, RaycastWorld, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
 use specs::{prelude::*, shred::Fetch, storage::MaskedStorage, Component};
 

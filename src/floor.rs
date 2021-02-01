@@ -12,6 +12,7 @@ impl Into<MeshId> for Floor {
 
 pub struct Floors {
     pub metal: Floor,
+    pub dirt: Floor,
 }
 
 pub fn load_floors(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Floors {
@@ -19,6 +20,10 @@ pub fn load_floors(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Flo
         metal: Floor(mesh_manager.add(
             device,
             &Mesh::rectangular_prism(1.0, 1.0, 0.1, Point3::new(0.9, 0.9, 1.0)),
+        )),
+        dirt: Floor(mesh_manager.add(
+            device,
+            &Mesh::rectangular_prism(1.0, 1.0, 0.1, Point3::new(0.14, 0.08, 0.08)),
         )),
     }
 }

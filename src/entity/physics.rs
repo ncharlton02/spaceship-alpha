@@ -57,8 +57,8 @@ impl<'a> System<'a> for PhysicsSystem {
 
         // Setup Collision
         for (entity, transform, collider) in (&entities, &transforms, &colliders).join() {
-            let position = to_nalgebra_pos(&transform);
-            let shape = collider.shape.as_shape_handle();
+            let position = to_nalgebra_pos(&transform, &collider.hitbox.offset);
+            let shape = collider.hitbox.as_shape_handle();
             let mut group = CollisionGroups::new()
                 .with_membership(&[collider.group])
                 .with_whitelist(&collider.whitelist);
@@ -106,11 +106,11 @@ impl<'a> System<'a> for PhysicsSystem {
     }
 }
 
-fn to_nalgebra_pos(transform: &Transform) -> Isometry3<f32> {
+fn to_nalgebra_pos(transform: &Transform, offset: &Vector3<f32>) -> Isometry3<f32> {
     let translation = Translation3::new(
-        transform.position.x,
-        transform.position.y,
-        transform.position.z,
+        transform.position.x + offset.x,
+        transform.position.y + offset.y,
+        transform.position.z + offset.z,
     );
     let rotation = UnitQuaternion::from_quaternion(Quaternion::new(
         transform.rotation.s,
@@ -122,18 +122,25 @@ fn to_nalgebra_pos(transform: &Transform) -> Isometry3<f32> {
     Isometry3::from_parts(translation, rotation)
 }
 
-#[derive(Debug)]
-pub enum ColliderShape {
-    /// The Full Size of the Box
-    Cuboid(Vector3<f32>),
-    Sphere(f32),
+#[derive(Clone)]
+pub struct Hitbox {
+    pub shape: ColliderShape,
+    pub offset: Vector3<f32>,
 }
 
-impl ColliderShape {
+impl Hitbox {
+    pub fn new(shape: ColliderShape, offset: Vector3<f32>) -> Hitbox {
+        Hitbox { shape, offset }
+    }
+
+    pub fn with_shape(shape: ColliderShape) -> Self {
+        Hitbox::new(shape, Vector3::zero())
+    }
+
     pub fn as_shape_handle(&self) -> shape::ShapeHandle<f32> {
         use ncollide3d::shape::*;
 
-        match self {
+        match self.shape {
             ColliderShape::Cuboid(size) => {
                 // NCollide Wants half-extents but we want to use the full size of the box
                 ShapeHandle::new(Cuboid::new(NVector3::new(
@@ -142,16 +149,18 @@ impl ColliderShape {
                     size.z / 2.0,
                 )))
             }
-            ColliderShape::Sphere(radius) => ShapeHandle::new(Ball::new(*radius)),
+            ColliderShape::Sphere(radius) => ShapeHandle::new(Ball::new(radius)),
         }
     }
 
     pub fn to_hitbox_model(&self, transform: &Transform) -> Matrix4<f32> {
         let mut transform = transform.clone();
-        match self {
-            ColliderShape::Cuboid(size) => transform.scale = Point3::from_vec(*size),
+        transform.position += self.offset;
+
+        match self.shape {
+            ColliderShape::Cuboid(size) => transform.scale = Point3::from_vec(size),
             ColliderShape::Sphere(radius) => {
-                transform.scale = Point3::new(*radius, *radius, *radius);
+                transform.scale = Point3::new(radius, radius, radius);
             }
         }
 
@@ -159,17 +168,24 @@ impl ColliderShape {
     }
 
     pub fn to_hitbox_mesh(&self, meshes: &HitboxMeshes) -> MeshId {
-        match self {
+        match self.shape {
             ColliderShape::Cuboid(_) => meshes.unit_cube,
             ColliderShape::Sphere(_) => meshes.unit_sphere,
         }
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ColliderShape {
+    /// The Full Size of the Box
+    Cuboid(Vector3<f32>),
+    Sphere(f32),
+}
+
 #[derive(Component)]
 #[storage(VecStorage)]
 pub struct Collider {
-    pub shape: ColliderShape,
+    pub hitbox: Hitbox,
     pub group: usize,
     pub whitelist: Vec<usize>,
     raycast_id: Option<CollisionObjectSlabHandle>,
@@ -184,9 +200,9 @@ impl Collider {
     pub const SHIP: usize = 2;
     pub const MISSLE: usize = 3;
 
-    pub fn new(shape: ColliderShape, group: usize, whitelist: Vec<usize>) -> Self {
+    pub fn new(hitbox: Hitbox, group: usize, whitelist: Vec<usize>) -> Self {
         Self {
-            shape,
+            hitbox,
             group,
             whitelist,
             raycast_id: None,
@@ -214,7 +230,7 @@ impl RaycastWorld {
         }
 
         if let Some(id) = collider.model_id {
-            mesh_manager.remove_model(collider.shape.to_hitbox_mesh(meshes), id);
+            mesh_manager.remove_model(collider.hitbox.to_hitbox_mesh(meshes), id);
         }
     }
 
@@ -265,20 +281,20 @@ impl<'a> System<'a> for RaycastSystem {
             // Safety: We can use get_unchecked here because we know the entity is alive
             // from joining the Entities resource
             let collider = colliders.get_unchecked();
-            let position = to_nalgebra_pos(&transform);
-            let hitbox_mesh = collider.shape.to_hitbox_mesh(&hitbox_meshes);
-            let hitbox_matrix = collider.shape.to_hitbox_model(&transform);
+            let position = to_nalgebra_pos(&transform, &collider.hitbox.offset);
+            let hitbox_mesh = collider.hitbox.to_hitbox_mesh(&hitbox_meshes);
+            let hitbox_matrix = collider.hitbox.to_hitbox_model(&transform);
 
             if let (Some(id), Some(model)) = (collider.raycast_id, collider.model_id) {
                 let collider_object = world
                     .get_mut(id)
                     .expect("Raycast ID does not exist in collision world!");
                 collider_object.set_position(position);
-                collider_object.set_shape(collider.shape.as_shape_handle());
+                collider_object.set_shape(collider.hitbox.as_shape_handle());
                 meshes.update_model(hitbox_mesh, model, hitbox_matrix);
             } else {
                 let collider = colliders.get_mut_unchecked();
-                let shape = collider.shape.as_shape_handle();
+                let shape = collider.hitbox.as_shape_handle();
                 let group = ncollide3d::pipeline::object::CollisionGroups::new()
                     .with_membership(&[collider.group])
                     .with_whitelist(&[Collider::RAYCAST]);

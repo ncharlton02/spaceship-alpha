@@ -1,6 +1,6 @@
 use crate::entity::{
     objects::{self, Health, ObjectMeshes},
-    Line, RaycastWorld, Transform,
+    ColliderShape, Hitbox, Line, RaycastWorld, Transform,
 };
 use crate::graphics::{self, Mesh, MeshId, MeshManager};
 use crate::InputAction;
@@ -19,7 +19,9 @@ pub struct Block {
     pub size: Point2<u16>,
     /// The height of the block (z)
     pub height: f32,
+    pub hitbox: Hitbox,
     pub setup: Option<OnBlockSetup>,
+    pub is_gadget: bool,
 }
 
 pub struct Blocks {
@@ -51,36 +53,49 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         &mut blocks,
         register_mesh(&graphics::load_mesh("wall")),
         (1, 1, 3.0),
+        None,
         "wall",
         None,
+        false,
     );
     let engine = create_block(
         &mut blocks,
         register_mesh(&graphics::load_mesh("engine")),
         (1, 1, 1.0),
+        None,
         "engine",
         None,
+        false,
     );
     let cube = create_block(
         &mut blocks,
         register_mesh(&graphics::load_mesh("box")),
         (1, 1, 1.0),
+        None,
         "Box",
         None,
+        false,
     );
     let miner = create_block(
         &mut blocks,
         register_mesh(&graphics::load_mesh("miner")),
         (1, 1, 1.0),
+        None,
         "Miner",
         Some(setup_miner),
+        false,
     );
     let laser = create_block(
         &mut blocks,
         register_mesh(&graphics::load_mesh("laser")),
-        (1, 1, 1.0),
+        (1, 1, 0.2),
+        Some(Hitbox::new(
+            ColliderShape::Cuboid(Vector3::new(0.6, 0.6, 0.525)),
+            Vector3::new(0.0, 0.0, 0.525 / 2.0),
+        )),
         "Laser",
         Some(setup_laser),
+        true,
     );
 
     Blocks {
@@ -97,8 +112,10 @@ fn create_block(
     blocks: &mut Vec<Block>,
     mesh_id: MeshId,
     size: (u16, u16, f32),
+    hitbox: Option<Hitbox>,
     type_name: &'static str,
     setup: Option<OnBlockSetup>,
+    is_gadget: bool,
 ) -> BlockId {
     let id = blocks.len();
     let block = Block {
@@ -106,6 +123,11 @@ fn create_block(
         mesh_id,
         type_name,
         setup,
+        is_gadget,
+        hitbox: hitbox.unwrap_or(Hitbox::new(
+            ColliderShape::Cuboid(Vector3::new(size.0 as f32, size.1 as f32, size.2)),
+            Vector3::new(0.0, 0.0, size.2 / 2.0),
+        )),
         size: Point2::new(size.0, size.1),
         height: size.2,
     };
@@ -199,9 +221,9 @@ impl<'a> System<'a> for LaserSystem {
             if let InputAction::Laser(target) = *input {
                 let target_pos = transforms.get(target).unwrap().position;
                 let transform = transforms.get_mut(entity).unwrap();
-                let mut start_pos = transform.position + Vector3::new(0.0, 0.0, 0.3);
+                let mut start_pos = transform.position + Vector3::new(0.0, 0.0, 0.4);
                 let angle_xy = (start_pos.y - target_pos.y).atan2(start_pos.x - target_pos.x);
-                let radius = 0.6; //TODO: Fix this when laser block collision redone
+                let radius = 0.35; 
                 start_pos -= radius * Vector3::new(angle_xy.cos(), angle_xy.sin(), 0.0);
 
                 let raycast = raycaster.raycast(Vec::with_capacity(0), start_pos, target_pos);

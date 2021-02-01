@@ -1,5 +1,5 @@
 use super::{
-    physics::{Collider, ColliderShape, RigidBody},
+    physics::{Collider, ColliderShape, Hitbox, RigidBody},
     EcsUtils, Model, Transform,
 };
 use crate::graphics::{MeshId, MeshManager};
@@ -83,7 +83,7 @@ pub fn create_asteroid(world: &mut World) {
             velocity: Vector3::new(1.0, 0.0, 0.0),
         })
         .with(Collider::new(
-            ColliderShape::Sphere(0.7),
+            Hitbox::with_shape(ColliderShape::Sphere(0.8)),
             Collider::ASTEROID,
             vec![Collider::SHIP, Collider::MISSLE],
         ))
@@ -115,7 +115,7 @@ pub fn build_mining_missle(
             velocity: Vector3::new(0.0, 0.0, MiningMissle::SPEED),
         })
         .with(Collider::new(
-            ColliderShape::Sphere(0.2),
+            Hitbox::with_shape(ColliderShape::Sphere(0.2)),
             Collider::MISSLE,
             vec![Collider::ASTEROID],
         ))
