@@ -213,7 +213,7 @@ impl<'a> System<'a> for LaserSystem {
         WriteStorage<'a, Health>,
         WriteStorage<'a, Transform>,
     );
-
+ 
     fn run(&mut self, data: Self::SystemData) {
         let (entities, input, raycaster, lasers, mut lines, mut healths, mut transforms) = data;
 

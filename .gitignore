@@ -1,2 +1,2 @@
-/target
-/src/shaders/**.spv
+/target/
+/assets/shaders/**.spv

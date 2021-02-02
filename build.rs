@@ -6,7 +6,7 @@ use std::process::Command;
 fn main() -> std::io::Result<()> {
     let root_path = env::var("CARGO_MANIFEST_DIR").unwrap();
     let mut src_dir = PathBuf::from(root_path);
-    src_dir.push("src");
+    src_dir.push("assets");
     src_dir.push("shaders");
 
     for entry in fs::read_dir(src_dir)? {

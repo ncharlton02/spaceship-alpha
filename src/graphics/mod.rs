@@ -274,10 +274,20 @@ impl Renderer {
             label: Some("Camera Bind Group"),
         });
 
-        let vertex_shader =
-            device.create_shader_module(&wgpu::include_spirv!("../shaders/basic.vert.spv"));
-        let frag_shader =
-            device.create_shader_module(&wgpu::include_spirv!("../shaders/basic.frag.spv"));
+        let vertex_bytes = load_shader("assets/shaders/basic.vert.spv");
+        let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex"),
+            source: wgpu::util::make_spirv(&vertex_bytes),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
+
+        let frag_bytes = load_shader("assets/shaders/basic.frag.spv");
+        let frag_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Fragment"),
+            source: wgpu::util::make_spirv(&frag_bytes),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
+
         let depth_texture = create_depth_texture(device, swapchain);
         let msaa_texture = create_msaa_texture(device, swapchain);
 
@@ -540,5 +550,13 @@ impl Camera {
                 normalized_coords.z,
             ) * w
         }
+    }
+}
+
+pub fn load_shader(path: &'static str) -> Vec<u8> {
+    if let Ok(bytes) = std::fs::read(path) {
+        bytes
+    } else {
+        panic!("Unable to read shader: {}", path);
     }
 }

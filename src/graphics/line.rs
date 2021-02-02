@@ -22,10 +22,19 @@ impl LineRenderer {
             mapped_at_creation: false,
         });
 
-        let vertex_shader =
-            device.create_shader_module(&wgpu::include_spirv!("../shaders/line.vert.spv"));
-        let frag_shader =
-            device.create_shader_module(&wgpu::include_spirv!("../shaders/line.frag.spv"));
+        let vertex_bytes = super::load_shader("assets/shaders/line.vert.spv");
+        let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex"),
+            source: wgpu::util::make_spirv(&vertex_bytes),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
+
+        let frag_bytes = super::load_shader("assets/shaders/line.frag.spv");
+        let frag_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Fragment"),
+            source: wgpu::util::make_spirv(&frag_bytes),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Line Pipeline Layout"),
