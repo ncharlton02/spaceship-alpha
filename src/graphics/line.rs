@@ -36,43 +36,45 @@ impl LineRenderer {
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vertex_shader,
-                entry_point: "main",
-            },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &frag_shader,
-                entry_point: "main",
-            }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineList,
+                strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: wgpu::CullMode::Back,
-                ..Default::default()
-            }),
-            primitive_topology: wgpu::PrimitiveTopology::LineList,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: swapchain.format,
-                color_blend: wgpu::BlendDescriptor::default(),
-                alpha_blend: wgpu::BlendDescriptor::default(),
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                polygon_mode: wgpu::PolygonMode::Fill,
+            },
+            multisample: wgpu::MultisampleState {
+                count: crate::MSAA_SAMPLE,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
                 format: super::Renderer::DEPTH_FORMAT,
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilStateDescriptor::default(),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+                clamp_depth: false,
             }),
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: None,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                    stride: mem::size_of::<Line>() as wgpu::BufferAddress,
+            vertex: wgpu::VertexState {
+                module: &vertex_shader,
+                entry_point: "main",
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: mem::size_of::<Line>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Instance,
                     attributes: &wgpu::vertex_attr_array![0 => Float3, 1 => Float3, 2 => Float3],
                 }],
             },
-            sample_count: crate::MSAA_SAMPLE,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
+            fragment: Some(wgpu::FragmentState {
+                module: &frag_shader,
+                entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: swapchain.format,
+                    color_blend: wgpu::BlendState::default(),
+                    alpha_blend: wgpu::BlendState::default(),
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
+            }),
         });
 
         Self {

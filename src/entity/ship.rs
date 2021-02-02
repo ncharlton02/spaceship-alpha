@@ -1,7 +1,7 @@
 use super::{Collider, Model, Transform};
 use crate::block::{BlockId, Blocks};
 use crate::floor::{Floor, Floors};
-use cgmath::{Point2};
+use cgmath::Point2;
 use specs::{prelude::*, world::EntitiesRes, Component};
 use std::collections::HashMap;
 

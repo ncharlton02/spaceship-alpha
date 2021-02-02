@@ -223,7 +223,7 @@ impl<'a> System<'a> for LaserSystem {
                 let transform = transforms.get_mut(entity).unwrap();
                 let mut start_pos = transform.position + Vector3::new(0.0, 0.0, 0.4);
                 let angle_xy = (start_pos.y - target_pos.y).atan2(start_pos.x - target_pos.x);
-                let radius = 0.35; 
+                let radius = 0.35;
                 start_pos -= radius * Vector3::new(angle_xy.cos(), angle_xy.sin(), 0.0);
 
                 let raycast = raycaster.raycast(Vec::with_capacity(0), start_pos, target_pos);
