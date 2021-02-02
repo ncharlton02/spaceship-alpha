@@ -11,7 +11,7 @@ wgpu = "0.7.0"
 winit = "0.23.0"
 cgmath = "0.17.0"
 specs = { version = "0.16.1", features = ["specs-derive"] }
-futures = "0.3"
+futures = {version = "0.3", default-features = false, features = ["executor"] }
 bytemuck = "1.2.0"
 generational-arena = "0.2"
 lazy_static = "1.4.0"

@@ -123,12 +123,6 @@ fn start<App: Application>(
         queue,
     }: Setup,
 ) {
-    let (mut pool, _) = {
-        let local_pool = futures::executor::LocalPool::new();
-        let spawner = local_pool.spawner();
-        (local_pool, spawner)
-    };
-
     let mut sc_desc = wgpu::SwapChainDescriptor {
         usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
         format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -152,8 +146,6 @@ fn start<App: Application>(
                     last_update_inst = Instant::now();
                 }
                 window.request_redraw();
-
-                pool.run_until_stalled();
             }
             event::Event::WindowEvent {
                 event: WindowEvent::Resized(size),
