@@ -6,6 +6,7 @@ use entity::{Collider, ECS};
 use graphics::{Camera, MeshManager, Renderer};
 use specs::prelude::*;
 use std::collections::HashSet;
+use ui::Ui;
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = false;
@@ -19,6 +20,7 @@ mod block;
 mod entity;
 mod floor;
 mod graphics;
+mod ui;
 
 struct AppState {
     renderer: Renderer,
@@ -27,6 +29,7 @@ struct AppState {
     keys: Keys,
     window_size: Point2<f32>,
     left_click: Option<Point2<f32>>,
+    ui: Ui,
 }
 
 impl AppState {
@@ -63,9 +66,13 @@ impl AppState {
 }
 
 impl app::Application for AppState {
-    fn init(swapchain: &wgpu::SwapChainDescriptor, device: &wgpu::Device, _: &wgpu::Queue) -> Self {
+    fn init(
+        swapchain: &wgpu::SwapChainDescriptor,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Self {
         let mut mesh_manager = MeshManager::new();
-        let renderer = Renderer::new(device, &swapchain);
+        let renderer = Renderer::new(device, queue, &swapchain);
         let blocks = block::load_blocks(device, &mut mesh_manager);
         let floors = floor::load_floors(device, &mut mesh_manager);
         let camera = Camera {
@@ -81,6 +88,8 @@ impl app::Application for AppState {
         let ecs = ECS::new(device, mesh_manager, blocks, floors);
         let keys = Keys(HashSet::new());
         let window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
+        let ui = Ui::new(renderer.ui_renderer.textures());
+        queue.submit(None);
 
         AppState {
             renderer,
@@ -88,6 +97,7 @@ impl app::Application for AppState {
             ecs,
             keys,
             window_size,
+            ui,
             left_click: None,
         }
     }
@@ -96,10 +106,10 @@ impl app::Application for AppState {
         &mut self,
         swapchain: &wgpu::SwapChainDescriptor,
         device: &wgpu::Device,
-        _: &wgpu::Queue,
+        queue: &wgpu::Queue,
     ) {
         self.camera.resize(swapchain);
-        self.renderer.resize(device, swapchain);
+        self.renderer.resize(device, queue, swapchain);
         self.window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
     }
 
@@ -122,8 +132,11 @@ impl app::Application for AppState {
         &mut self,
         button: event::MouseButton,
         state: event::ElementState,
-        pt: Point2<f32>,
+        mut pt: Point2<f32>,
     ) {
+        pt.y = self.window_size.y - pt.y;
+        self.ui.on_click(button, state, pt);
+
         if button != event::MouseButton::Left {
             return;
         }
@@ -179,14 +192,24 @@ impl app::Application for AppState {
         }
 
         let mut mesh_manager = self.ecs.world.fetch_mut::<MeshManager>();
-        self.renderer.render(
+        self.ui.render(&mut self.renderer.ui_renderer.batch);
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        self.renderer.render_world(
             device,
             queue,
             texture,
+            &mut encoder,
             &self.camera,
             &mut mesh_manager,
             &lines,
-        )
+        );
+
+        self.renderer
+            .render_ui(device, queue, texture, &mut encoder);
+        queue.submit(Some(encoder.finish()));
     }
 }
 

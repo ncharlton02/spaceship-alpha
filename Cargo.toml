@@ -17,3 +17,8 @@ generational-arena = "0.2"
 lazy_static = "1.4.0"
 nalgebra = "0.20"
 ncollide3d = "0.22"
+image = "0.23.8"
+
+[build-dependencies]
+texture_packer = "0.21.1"
+image = "0.23.8"

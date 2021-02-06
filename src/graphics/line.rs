@@ -22,16 +22,16 @@ impl LineRenderer {
             mapped_at_creation: false,
         });
 
-        let vertex_bytes = super::load_shader("assets/shaders/line.vert.spv");
+        let vertex_bytes = super::read_file_bytes("assets/shaders/line.vert.spv");
         let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Vertex"),
+            label: Some("Line Vertex Shader"),
             source: wgpu::util::make_spirv(&vertex_bytes),
             flags: wgpu::ShaderFlags::VALIDATION,
         });
 
-        let frag_bytes = super::load_shader("assets/shaders/line.frag.spv");
+        let frag_bytes = super::read_file_bytes("assets/shaders/line.frag.spv");
         let frag_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Fragment"),
+            label: Some("Line Fragment Shader"),
             source: wgpu::util::make_spirv(&frag_bytes),
             flags: wgpu::ShaderFlags::VALIDATION,
         });

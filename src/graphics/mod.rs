@@ -6,9 +6,11 @@ use wgpu::util::DeviceExt;
 
 pub use line::*;
 pub use obj::*;
+pub use ui::*;
 
 mod line;
 mod obj;
+mod ui;
 
 pub struct Mesh {
     pub name: String,
@@ -227,18 +229,23 @@ impl GPUMesh {
 }
 
 pub struct Renderer {
+    pub ui_renderer: UiRenderer,
+    line_renderer: LineRenderer,
     pipeline: wgpu::RenderPipeline,
     camera_bg: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     depth_texture: GPUTexture,
     msaa_texture: GPUTexture,
-    line_renderer: LineRenderer,
 }
 
 impl Renderer {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn new(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) -> Renderer {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        swapchain: &wgpu::SwapChainDescriptor,
+    ) -> Renderer {
         let camera_buffer_size = 16 * mem::size_of::<f32>() as u64;
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -274,14 +281,14 @@ impl Renderer {
             label: Some("Camera Bind Group"),
         });
 
-        let vertex_bytes = load_shader("assets/shaders/basic.vert.spv");
+        let vertex_bytes = read_file_bytes("assets/shaders/basic.vert.spv");
         let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Vertex"),
             source: wgpu::util::make_spirv(&vertex_bytes),
             flags: wgpu::ShaderFlags::VALIDATION,
         });
 
-        let frag_bytes = load_shader("assets/shaders/basic.frag.spv");
+        let frag_bytes = read_file_bytes("assets/shaders/basic.frag.spv");
         let frag_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Fragment"),
             source: wgpu::util::make_spirv(&frag_bytes),
@@ -352,6 +359,7 @@ impl Renderer {
         });
 
         let line_renderer = LineRenderer::new(device, &camera_bgl, swapchain);
+        let ui_renderer = UiRenderer::new(device, queue, swapchain);
 
         Renderer {
             pipeline,
@@ -360,14 +368,16 @@ impl Renderer {
             depth_texture,
             msaa_texture,
             line_renderer,
+            ui_renderer,
         }
     }
 
-    pub fn render(
+    pub fn render_world(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         frame: &wgpu::SwapChainTexture,
+        encoder: &mut wgpu::CommandEncoder,
         camera: &Camera,
         mesh_manager: &mut MeshManager,
         lines: &[Line],
@@ -384,8 +394,6 @@ impl Renderer {
             bytemuck::cast_slice(&[camera.build_view_projection_matrix()]),
         );
 
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -429,12 +437,54 @@ impl Renderer {
         rpass.draw(0..2, 0..lines.len() as u32);
 
         std::mem::drop(rpass);
-        queue.submit(Some(encoder.finish()));
     }
 
-    pub fn resize(&mut self, device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) {
+    pub fn render_ui(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        frame: &wgpu::SwapChainTexture,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &self.msaa_texture.view,
+                resolve_target: Some(&frame.view),
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
+        rpass.set_pipeline(&self.ui_renderer.pipeline);
+        rpass.set_bind_group(0, &self.ui_renderer.camera.bind_group, &[]);
+
+        self.ui_renderer
+            .batch
+            .sprites()
+            .iter()
+            .for_each(|(id, sprites)| {
+                let texture = self.ui_renderer.texture_arena.get(*id);
+                queue.write_buffer(&texture.sprite_buffer, 0, bytemuck::cast_slice(&sprites));
+                rpass.set_bind_group(1, &texture.bind_group, &[]);
+                rpass.set_vertex_buffer(0, texture.sprite_buffer.slice(..));
+                rpass.draw(0..6, 0..sprites.len() as u32);
+            });
+
+        std::mem::drop(rpass);
+    }
+
+    pub fn resize(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        swapchain: &wgpu::SwapChainDescriptor,
+    ) {
         self.depth_texture = create_depth_texture(device, swapchain);
         self.msaa_texture = create_msaa_texture(device, swapchain);
+        self.ui_renderer.camera.update(queue, swapchain);
     }
 }
 
@@ -484,7 +534,7 @@ fn create_msaa_texture(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescrip
 }
 
 #[derive(Clone, Copy)]
-struct CameraMatrix(Matrix4<f32>);
+pub struct CameraMatrix(Matrix4<f32>);
 
 unsafe impl bytemuck::Pod for CameraMatrix {}
 unsafe impl bytemuck::Zeroable for CameraMatrix {}
@@ -501,7 +551,7 @@ pub struct Camera {
 
 impl Camera {
     #[rustfmt::skip]
-    const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
+    pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,
         0.0, 0.0, 0.5, 0.0,
@@ -527,7 +577,7 @@ impl Camera {
         // See https://stackoverflow.com/questions/23644470/how-to-convert-mouse-coordinate-on-screen-to-3d-coordinate
         let mut normalized_coords = Vector4::new(
             (input.x / screen_size.x) * 2.0 - 1.0,
-            ((screen_size.y - input.y) / screen_size.y) * 2.0 - 1.0,
+            (input.y / screen_size.y) * 2.0 - 1.0,
             input.z,
             1.0,
         );
@@ -553,10 +603,10 @@ impl Camera {
     }
 }
 
-pub fn load_shader(path: &'static str) -> Vec<u8> {
+pub fn read_file_bytes(path: &'static str) -> Vec<u8> {
     if let Ok(bytes) = std::fs::read(path) {
         bytes
     } else {
-        panic!("Unable to read shader: {}", path);
+        panic!("Unable to load file: {}", path);
     }
 }
