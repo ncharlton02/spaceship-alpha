@@ -88,7 +88,7 @@ impl app::Application for AppState {
         let ecs = ECS::new(device, mesh_manager, blocks, floors);
         let keys = Keys(HashSet::new());
         let window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
-        let ui = Ui::new(renderer.ui_renderer.textures());
+        let ui = Ui::new(renderer.ui_renderer.assets());
         queue.submit(None);
 
         AppState {

@@ -18,6 +18,7 @@ lazy_static = "1.4.0"
 nalgebra = "0.20"
 ncollide3d = "0.22"
 image = "0.23.8"
+rusttype = "0.9.2"
 
 [build-dependencies]
 texture_packer = "0.21.1"

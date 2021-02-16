@@ -1,9 +1,15 @@
+use crate::ui::widget_textures;
 use cgmath::{Point2, Vector4};
 use image::GenericImageView;
 use std::collections::HashMap;
 use std::mem;
 use wgpu::util::DeviceExt;
-use crate::ui::widget_textures;
+
+/// The characters that are pre-rendered by the game.
+const FONT_CHARACTERS: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+    abcdefghijklmnopqrstuvwxyz\
+    1234567890\
+    !`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -24,7 +30,7 @@ pub struct UiTexture {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct UiTextureId(usize);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct UiTextureRegion {
     pub texture_id: UiTextureId,
     pub pos: Point2<f32>,
@@ -49,9 +55,10 @@ pub struct UiRenderer {
 }
 
 #[derive(Clone)]
-pub struct UiTextures {
+pub struct UiAssets {
     pub button: UiTextureRegion,
     pub button_pressed: UiTextureRegion,
+    pub medium_font: FontMap,
 }
 
 impl UiRenderer {
@@ -79,9 +86,12 @@ impl UiRenderer {
         });
         let mut texture_arena = TextureArena::new(device);
         let atlas = texture_arena.load_texture(device, queue, "assets/ui/widgets.png");
-        let textures = UiTextures {
+        let medium_font =
+            texture_arena.load_font(device, queue, "assets/ui/fonts/montserrat-medium.ttf");
+        let textures = UiAssets {
             button: atlas.sub_texture(widget_textures::BUTTON),
             button_pressed: atlas.sub_texture(widget_textures::BUTTON_PRESSED),
+            medium_font,
         };
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -149,8 +159,10 @@ impl UiRenderer {
         }
     }
 
-    pub fn textures(&self) -> UiTextures {
-        self.batch.textures.clone()
+    pub fn assets(&self) -> UiAssets {
+        //TODO: Do we really need to keep a copy in the batch
+        //or can we just have one copy in the Ui struct?
+        self.batch.assets.clone()
     }
 }
 
@@ -196,6 +208,88 @@ impl TextureArena {
         self.arena.get(id.0).unwrap()
     }
 
+    fn load_font(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        path: &'static str,
+    ) -> FontMap {
+        use rusttype::{point, Font, Point, Rect, Scale};
+
+        let padding = 2.0;
+        let bytes = super::read_file_bytes(path);
+        let font = Font::try_from_vec(bytes).unwrap();
+        let size = 32.0;
+        let scale = Scale::uniform(size);
+        let v_metrics = font.v_metrics(scale);
+        let glyphs: Vec<_> = font
+            .layout(
+                FONT_CHARACTERS,
+                scale,
+                point(padding, padding + v_metrics.ascent),
+            )
+            .collect();
+        let glyphs_height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
+        let glyphs_width = {
+            let min_x = glyphs
+                .first()
+                .map(|g| g.pixel_bounding_box().unwrap().min.x)
+                .unwrap();
+            let max_x = glyphs
+                .last()
+                .map(|g| g.pixel_bounding_box().unwrap().max.x)
+                .unwrap();
+            (max_x - min_x) as u32
+        };
+        let mut image = image::DynamicImage::new_rgba8(
+            glyphs_width + (padding as u32 * 2),
+            glyphs_height + (padding as u32 * 2),
+        )
+        .to_rgba();
+
+        for glyph in &glyphs {
+            if let Some(bounding_box) = glyph.pixel_bounding_box() {
+                glyph.draw(|x, y, v| {
+                    image.put_pixel(
+                        x + bounding_box.min.x as u32,
+                        y + bounding_box.min.y as u32,
+                        image::Rgba([255, 255, 255, (v * 255.0) as u8]),
+                    )
+                });
+            }
+        }
+
+        let texture = self.load_image(device, queue, path, image::DynamicImage::ImageRgba8(image));
+        let texture_width = glyphs_width as f32 + (padding * 2.0);
+        let texture_height = glyphs_height as f32 + (padding * 2.0);
+        let font_map: HashMap<char, UiTextureRegion> = FONT_CHARACTERS
+            .chars()
+            .zip(
+                glyphs
+                    .into_iter()
+                    .filter_map(|glyph| glyph.pixel_bounding_box())
+                    .map(|bbox| Rect {
+                        min: point(bbox.min.x as f32, bbox.min.y as f32),
+                        max: point(bbox.max.x as f32, bbox.max.y as f32),
+                    })
+                    .map(|bbox| UiTextureRegion {
+                        texture_id: texture.texture_id,
+                        pos: Point2::new(bbox.min.x / texture_width, 1.0 - (bbox.min.y / texture_height)),
+                        size: Point2::new(
+                            (bbox.max.x - bbox.min.x) / texture_width,
+                            -(bbox.max.y - bbox.min.y) / texture_height,
+                        ),
+                    }),
+            )
+            .collect();
+
+        FontMap {
+            map: font_map,
+            glyph_width: size,
+            glyph_height: size,
+        }
+    }
+
     fn load_texture(
         &mut self,
         device: &wgpu::Device,
@@ -204,6 +298,17 @@ impl TextureArena {
     ) -> UiTextureRegion {
         let bytes = super::read_file_bytes(path);
         let image = image::load_from_memory(&bytes).unwrap();
+
+        self.load_image(device, queue, path, image)
+    }
+
+    fn load_image(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        name: &'static str,
+        image: image::DynamicImage,
+    ) -> UiTextureRegion {
         let image_rgba = image.as_rgba8().unwrap();
         let (width, height) = image.dimensions();
         let id = self.arena.len();
@@ -264,7 +369,7 @@ impl TextureArena {
             label: Some("Texture Bind Group"),
         });
 
-        println!("Loaded UiTexture({}): {}", id, path);
+        println!("Loaded UiImage({}): {}", id, name);
         self.arena.push(UiTexture {
             sprite_buffer,
             bind_group,
@@ -342,14 +447,14 @@ impl UiCamera {
 }
 
 pub struct UiBatch {
-    pub textures: UiTextures,
+    pub assets: UiAssets,
     sprites: HashMap<UiTextureId, Vec<GPUSprite>>,
 }
 
 impl UiBatch {
-    fn new(textures: UiTextures) -> Self {
+    fn new(assets: UiAssets) -> Self {
         Self {
-            textures,
+            assets,
             sprites: HashMap::new(),
         }
     }
@@ -369,4 +474,20 @@ impl UiBatch {
     pub fn sprites(&self) -> &HashMap<UiTextureId, Vec<GPUSprite>> {
         &self.sprites
     }
+}
+
+#[derive(Clone)]
+pub struct FontMap{
+    // TODO - Do Non-Monoscpace Fonts
+    pub glyph_height: f32,
+    pub glyph_width: f32,
+    map: HashMap<char, UiTextureRegion>,
+}
+
+impl FontMap {
+
+    pub fn char(&self, c: char) -> UiTextureRegion {
+        *self.map.get(&c).expect(&format!("Invalid character: {}", c))
+    }
+    
 }

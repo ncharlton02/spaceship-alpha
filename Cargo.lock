@@ -1932,6 +1932,7 @@ dependencies = [
  "lazy_static",
  "nalgebra",
  "ncollide3d",
+ "rusttype",
  "specs",
  "texture_packer",
  "wgpu",

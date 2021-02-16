@@ -1,14 +1,14 @@
 use cgmath::{Point2, Vector2, Vector4};
 
-use crate::graphics::{GPUSprite, UiBatch, UiTextureId, UiTextureRegion, UiTextures};
+use crate::graphics::{GPUSprite, UiAssets, UiBatch, UiTextureId, UiTextureRegion, FontMap};
 use generational_arena::Arena;
 use std::any::Any;
 use winit::event;
 
 pub use button::*;
 
-pub mod widget_textures;
 mod button;
+pub mod widget_textures;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(generational_arena::Index);
@@ -69,12 +69,12 @@ pub struct Ui {
     handlers: Vec<Box<dyn NodeHandler>>,
     renderers: Vec<Box<dyn NodeRenderer>>,
     states: WidgetStates,
-    textures: UiTextures,
+    assets: UiAssets,
     mouse_focus: Option<NodeId>,
 }
 
 impl Ui {
-    pub fn new(textures: UiTextures) -> Self {
+    pub fn new(assets: UiAssets) -> Self {
         let mut ui = Self {
             geometries: Arena::new(),
             parents: Vec::new(),
@@ -83,7 +83,7 @@ impl Ui {
             handlers: Vec::new(),
             states: WidgetStates { states: Vec::new() },
             mouse_focus: None,
-            textures,
+            assets,
         };
 
         let root = create_button(&mut ui, None);
