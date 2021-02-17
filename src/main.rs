@@ -72,7 +72,7 @@ impl app::Application for AppState {
         queue: &wgpu::Queue,
     ) -> Self {
         let mut mesh_manager = MeshManager::new();
-        let renderer = Renderer::new(device, queue, &swapchain);
+        let (renderer, ui_assets) = Renderer::new(device, queue, &swapchain);
         let blocks = block::load_blocks(device, &mut mesh_manager);
         let floors = floor::load_floors(device, &mut mesh_manager);
         let camera = Camera {
@@ -88,7 +88,7 @@ impl app::Application for AppState {
         let ecs = ECS::new(device, mesh_manager, blocks, floors);
         let keys = Keys(HashSet::new());
         let window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
-        let ui = Ui::new(renderer.ui_renderer.assets());
+        let ui = Ui::new(ui_assets);
         queue.submit(None);
 
         AppState {

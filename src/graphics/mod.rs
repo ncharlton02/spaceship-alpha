@@ -241,11 +241,11 @@ pub struct Renderer {
 impl Renderer {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn new(
+    pub fn new<'a>(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         swapchain: &wgpu::SwapChainDescriptor,
-    ) -> Renderer {
+    ) -> (Renderer, UiAssets) {
         let camera_buffer_size = 16 * mem::size_of::<f32>() as u64;
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -359,9 +359,9 @@ impl Renderer {
         });
 
         let line_renderer = LineRenderer::new(device, &camera_bgl, swapchain);
-        let ui_renderer = UiRenderer::new(device, queue, swapchain);
+        let (ui_renderer, ui_assets) = UiRenderer::new(device, queue, swapchain);
 
-        Renderer {
+        (Renderer {
             pipeline,
             camera_bg,
             camera_buffer,
@@ -369,7 +369,7 @@ impl Renderer {
             msaa_texture,
             line_renderer,
             ui_renderer,
-        }
+        }, ui_assets)
     }
 
     pub fn render_world(

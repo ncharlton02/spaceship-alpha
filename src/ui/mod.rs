@@ -1,6 +1,8 @@
 use cgmath::{Point2, Vector2, Vector4};
 
-use crate::graphics::{GPUSprite, UiAssets, UiBatch, UiTextureId, UiTextureRegion, FontMap};
+use crate::graphics::{
+    FontGlyph, FontMap, GPUSprite, UiAssets, UiBatch, UiTextureId, UiTextureRegion,
+};
 use generational_arena::Arena;
 use std::any::Any;
 use winit::event;
@@ -308,6 +310,13 @@ impl Color {
         r: 1.0,
         g: 1.0,
         b: 1.0,
+        a: 1.0,
+    };
+
+    pub const BLACK: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
         a: 1.0,
     };
 }

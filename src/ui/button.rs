@@ -22,43 +22,52 @@ impl NodeRenderer for ButtonRenderer {
         })
         .render(ui_batch, ui, node, geometry, states);
 
-        TextLayout::new(Point2::new(10.0, 10.0), "HELLO WORLD!", &ui.assets.medium_font)
+        TextLayout::new(
+            Point2::new(10.0, 10.0),
+            "Click Me!",
+            &ui.assets.medium_font,
+        )
         .render(ui_batch, ui, node, geometry, states);
     }
 }
 
-struct TextLayout{
+struct TextLayout {
     offset: Point2<f32>,
-    glyphs: Vec<(Point2<f32>, UiTextureRegion)>,
+    glyphs: Vec<(Point2<f32>, FontGlyph)>,
     color: Color,
-    height: f32, 
-    width: f32,
 }
 
 impl TextLayout {
-
     pub fn new(pt: Point2<f32>, txt: &str, font: &FontMap) -> Self {
         let mut glyphs = Vec::new();
 
         let mut width = 0.0;
+        let mut last_char = None;
 
         for (index, c) in txt.chars().enumerate() {
-            if c != ' '{
-                let glyph = (Point2::new(width, 0.0), font.char(c));
-                glyphs.push(glyph);
+            if c != ' ' {
+                // TODO: Handle other whitespace
+                let font_char = font.char(c);
+                
+                if let Some(last_char) = last_char {
+                    width += font.pair_kerning(last_char, c);
+                }
+
+                glyphs.push((Point2::new(width, 0.0), font_char));
+                width += font_char.advance_width;
+            } else {
+                width += 20.0; //TODO - add spacing to FontMap
             }
-            width += font.glyph_width; //TODO - Make fonts monospace!!
+
+            last_char = Some(c);
         }
 
         Self {
             offset: pt,
-            width: glyphs.len() as f32 * font.glyph_width,
-            height: font.glyph_height,
-            color: Color::WHITE,
+            color: Color::BLACK,
             glyphs,
         }
-    } 
-
+    }
 }
 
 impl NodeRenderer for TextLayout {
@@ -71,30 +80,22 @@ impl NodeRenderer for TextLayout {
         _: &WidgetStates,
     ) {
         let color = Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a);
-        let pos = Vector4::new(
-            geometry.pos.x + self.offset.x,
-            geometry.pos.y + self.offset.y,
-            geometry.size.x,
-            geometry.size.y,
-        );
+        let pos_x = geometry.pos.x + self.offset.x;
+        let pos_y = geometry.pos.y + self.offset.y;
 
         for (glyph_offset, glyph) in &self.glyphs {
+            let texture = glyph.texture;
             ui_batch.draw(
-                glyph.texture_id,
+                texture.texture_id,
                 &GPUSprite {
                     pos: Vector4::new(
-                        pos.x + glyph_offset.x,
-                        pos.y + glyph_offset.y,
-                        pos.z,
-                        pos.w,
+                        pos_x + glyph_offset.x,
+                        pos_y + glyph_offset.y,
+                        glyph.width,
+                        glyph.height,
                     ),
-                    uvs: Vector4::new(
-                        glyph.pos.x,
-                        glyph.pos.y,
-                        glyph.size.x,
-                        glyph.size.y,
-                    ),
-                    color
+                    uvs: Vector4::new(texture.pos.x, texture.pos.y, texture.size.x, texture.size.y),
+                    color,
                 },
             );
         }
@@ -133,7 +134,7 @@ pub fn create_button(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
         parent,
         NodeGeometry {
             pos: Point2::new(0.0, 0.0),
-            size: Point2::new(40.0, 80.0),
+            size: Point2::new(180.0, 80.0),
         },
         Box::new(ButtonRenderer),
         Box::new(ButtonHandler),
