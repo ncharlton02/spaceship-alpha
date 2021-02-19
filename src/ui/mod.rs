@@ -95,7 +95,7 @@ impl Ui {
                 pos: Point2::new(0.0, 0.0),
                 size: Point2::new(1.0, 1.0),
             },
-            NodeRenderers::empty(),
+            Box::new(EmptyRenderer),
             Box::new(EmptyNodeHandler),
             None,
         );
@@ -205,21 +205,13 @@ pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
     }
 }
 
-pub struct NodeRenderers;
-
-impl NodeRenderers {
-    fn empty() -> Box<EmptyRenderer> {
-        Box::new(EmptyRenderer)
-    }
-
-    pub fn sprite(texture: UiTextureRegion) -> Box<SpriteRenderer> {
-        Box::new(SpriteRenderer {
-            texture,
-            color: Color::WHITE,
-            offset: Point2::new(0.0, 0.0),
-            scale: Point2::new(1.0, 1.0),
-        })
-    }
+pub fn new_sprite_renderer(texture: UiTextureRegion) -> Box<SpriteRenderer> {
+    Box::new(SpriteRenderer {
+        texture,
+        color: Color::WHITE,
+        offset: Point2::new(0.0, 0.0),
+        scale: Point2::new(1.0, 1.0),
+    })
 }
 
 pub trait NodeRenderer {
@@ -274,6 +266,84 @@ impl NodeRenderer for SpriteRenderer {
                 color: Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a),
             },
         );
+    }
+}
+
+pub struct TextLayout {
+    pub offset: Point2<f32>,
+    pub width: f32,
+    pub height: f32,
+    pub color: Color,
+    glyphs: Vec<(Point2<f32>, FontGlyph)>,
+}
+
+impl TextLayout {
+    pub fn new(offset: Point2<f32>, txt: &str, font: &FontMap, color: Color) -> Self {
+        let mut glyphs = Vec::new();
+
+        let mut width = 0.0;
+        let mut height = 0.0f32;
+        let mut last_char = None;
+
+        for (index, c) in txt.chars().enumerate() {
+            if c != ' ' {
+                // TODO: Handle other whitespace
+                let font_char = font.char(c);
+                
+                if let Some(last_char) = last_char {
+                    width += font.pair_kerning(last_char, c);
+                }
+
+                glyphs.push((Point2::new(width, font_char.descent), font_char));
+                width += font_char.advance_width;
+                height = height.max(font_char.height);
+                println!("{}: {}", c, width);
+            } else {
+                width += 20.0; //TODO - add spacing to FontMap
+            }
+
+            last_char = Some(c);
+        }
+
+        Self {
+            width,
+            height,
+            color,
+            offset,
+            glyphs,
+        }
+    }
+}
+
+impl NodeRenderer for TextLayout {
+    fn render(
+        &self,
+        ui_batch: &mut UiBatch,
+        _: &Ui,
+        _: NodeId,
+        geometry: &NodeGeometry,
+        _: &WidgetStates,
+    ) {
+        let color = Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a);
+        let pos_x = geometry.pos.x + self.offset.x;
+        let pos_y = geometry.pos.y + self.offset.y;
+
+        for (glyph_offset, glyph) in &self.glyphs {
+            let texture = glyph.texture;
+            ui_batch.draw(
+                texture.texture_id,
+                &GPUSprite {
+                    pos: Vector4::new(
+                        pos_x + glyph_offset.x,
+                        pos_y + glyph_offset.y,
+                        glyph.width,
+                        glyph.height,
+                    ),
+                    uvs: Vector4::new(texture.pos.x, texture.pos.y, texture.size.x, texture.size.y),
+                    color,
+                },
+            );
+        }
     }
 }
 

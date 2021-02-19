@@ -6,11 +6,12 @@ use std::collections::HashMap;
 use std::mem;
 use wgpu::util::DeviceExt;
 
-/// The characters that are pre-rendered by the game.
+// The characters that are pre-rendered by the game.
 const FONT_CHARACTERS: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\
     abcdefghijklmnopqrstuvwxyz\
     1234567890\
     !`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*";
+// const FONT_CHARACTERS: &'static str = "hello";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -217,11 +218,12 @@ impl TextureArena {
         let size = 32.0;
         let scale = Scale::uniform(size);
         let v_metrics = font.v_metrics(scale);
+        let baseline = padding + v_metrics.ascent;
         let glyphs: Vec<_> = font
             .layout(
                 FONT_CHARACTERS,
                 scale,
-                point(padding, padding + v_metrics.ascent),
+                point(padding, baseline),
             )
             .collect();
         let glyphs_height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
@@ -266,11 +268,13 @@ impl TextureArena {
                     max: point(bbox.max.x as f32, bbox.max.y as f32),
                 };
 
-                println!("BBox: {:#?}", bbox);
+                // println!("left side bearing: {}", h_metrics.left_side_bearing);
+                // println!("BBox: {:#?}", bbox);
                 FontGlyph {
                     width: bbox.max.x - bbox.min.x,
                     height: bbox.max.y - bbox.min.y,
-                    advance_width: h_metrics.advance_width,
+                    advance_width: h_metrics.advance_width - h_metrics.left_side_bearing,
+                    descent: baseline - bbox.max.y,
                     // We need render bottom up, so we flip y min/max here
                     texture: UiTextureRegion {
                         texture_id: texture.texture_id,
@@ -283,7 +287,7 @@ impl TextureArena {
                 }
             });
         let map = FONT_CHARACTERS.chars().zip(font_glyphs).collect();
-        println!("Map: {:#?}", map);
+        // println!("Map: {:#?}", map);
 
         FontMap { font, scale, map }
     }
@@ -478,6 +482,7 @@ pub struct FontGlyph {
     pub width: f32,
     pub height: f32,
     pub advance_width: f32,
+    pub descent: f32,
 }
 
 // TODO - Remove clone requirement and do not store
