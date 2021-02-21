@@ -2016,9 +2016,9 @@ dependencies = [
 
 [[package]]
 name = "texture_packer"
-version = "0.21.1"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb33a4fd8021f9f30a7f2da815e1b0c7a3b4900ab17cff870fef2512a29dc205"
+checksum = "46b0983ffc6e338284a5657a3c1560320c963d190de167a90f7eb91e4fdfeba4"
 dependencies = [
  "image",
 ]

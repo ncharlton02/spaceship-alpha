@@ -1,8 +1,6 @@
 use cgmath::{Point2, Vector2, Vector4};
 
-use crate::graphics::{
-    FontGlyph, FontMap, GPUSprite, UiAssets, UiBatch, UiTextureId, UiTextureRegion,
-};
+use crate::graphics::{FontGlyph, FontMap, TextureRegion2D, UiAssets, UiBatch};
 use generational_arena::Arena;
 use std::any::Any;
 use winit::event;
@@ -205,7 +203,7 @@ pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
     }
 }
 
-pub fn new_sprite_renderer(texture: UiTextureRegion) -> Box<SpriteRenderer> {
+pub fn new_sprite_renderer(texture: TextureRegion2D) -> Box<SpriteRenderer> {
     Box::new(SpriteRenderer {
         texture,
         color: Color::WHITE,
@@ -232,7 +230,7 @@ impl NodeRenderer for EmptyRenderer {
 }
 
 pub struct SpriteRenderer {
-    texture: UiTextureRegion,
+    texture: TextureRegion2D,
     color: Color,
     offset: Point2<f32>,
     scale: Point2<f32>,
@@ -254,17 +252,9 @@ impl NodeRenderer for SpriteRenderer {
             geometry.size.y * self.scale.y,
         );
         ui_batch.draw(
-            self.texture.texture_id,
-            &GPUSprite {
-                pos,
-                uvs: Vector4::new(
-                    self.texture.pos.x,
-                    self.texture.pos.y,
-                    self.texture.size.x,
-                    self.texture.size.y,
-                ),
-                color: Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a),
-            },
+            pos,
+            self.texture,
+            Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a),
         );
     }
 }
@@ -289,7 +279,7 @@ impl TextLayout {
             if c != ' ' {
                 // TODO: Handle other whitespace
                 let font_char = font.char(c);
-                
+
                 if let Some(last_char) = last_char {
                     width += font.pair_kerning(last_char, c);
                 }
@@ -297,7 +287,6 @@ impl TextLayout {
                 glyphs.push((Point2::new(width, font_char.descent), font_char));
                 width += font_char.advance_width;
                 height = height.max(font_char.height);
-                println!("{}: {}", c, width);
             } else {
                 width += 20.0; //TODO - add spacing to FontMap
             }
@@ -329,19 +318,15 @@ impl NodeRenderer for TextLayout {
         let pos_y = geometry.pos.y + self.offset.y;
 
         for (glyph_offset, glyph) in &self.glyphs {
-            let texture = glyph.texture;
             ui_batch.draw(
-                texture.texture_id,
-                &GPUSprite {
-                    pos: Vector4::new(
-                        pos_x + glyph_offset.x,
-                        pos_y + glyph_offset.y,
-                        glyph.width,
-                        glyph.height,
-                    ),
-                    uvs: Vector4::new(texture.pos.x, texture.pos.y, texture.size.x, texture.size.y),
-                    color,
-                },
+                Vector4::new(
+                    pos_x + glyph_offset.x,
+                    pos_y + glyph_offset.y,
+                    glyph.width,
+                    glyph.height,
+                ),
+                glyph.texture,
+                color,
             );
         }
     }

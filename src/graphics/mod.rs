@@ -361,15 +361,18 @@ impl Renderer {
         let line_renderer = LineRenderer::new(device, &camera_bgl, swapchain);
         let (ui_renderer, ui_assets) = UiRenderer::new(device, queue, swapchain);
 
-        (Renderer {
-            pipeline,
-            camera_bg,
-            camera_buffer,
-            depth_texture,
-            msaa_texture,
-            line_renderer,
-            ui_renderer,
-        }, ui_assets)
+        (
+            Renderer {
+                pipeline,
+                camera_bg,
+                camera_buffer,
+                depth_texture,
+                msaa_texture,
+                line_renderer,
+                ui_renderer,
+            },
+            ui_assets,
+        )
     }
 
     pub fn render_world(
@@ -446,6 +449,7 @@ impl Renderer {
         frame: &wgpu::SwapChainTexture,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        let sprites = self.ui_renderer.batch.sprites();
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -458,20 +462,16 @@ impl Renderer {
             }],
             depth_stencil_attachment: None,
         });
-        rpass.set_pipeline(&self.ui_renderer.pipeline);
         rpass.set_bind_group(0, &self.ui_renderer.camera.bind_group, &[]);
 
-        self.ui_renderer
-            .batch
-            .sprites()
-            .iter()
-            .for_each(|(id, sprites)| {
-                let texture = self.ui_renderer.texture_arena.get(*id);
-                queue.write_buffer(&texture.sprite_buffer, 0, bytemuck::cast_slice(&sprites));
-                rpass.set_bind_group(1, &texture.bind_group, &[]);
-                rpass.set_vertex_buffer(0, texture.sprite_buffer.slice(..));
-                rpass.draw(0..6, 0..sprites.len() as u32);
-            });
+        if let Some(bind_group) = &self.ui_renderer.batch.atlas.bind_group {
+            let sprite_buffer = &self.ui_renderer.batch.atlas.sprite_buffer;
+            rpass.set_pipeline(&self.ui_renderer.pipeline);
+            queue.write_buffer(sprite_buffer, 0, bytemuck::cast_slice(sprites));
+            rpass.set_bind_group(1, &bind_group, &[]);
+            rpass.set_vertex_buffer(0, sprite_buffer.slice(..));
+            rpass.draw(0..6, 0..sprites.len() as u32);
+        }
 
         std::mem::drop(rpass);
     }

@@ -14,14 +14,16 @@ impl NodeRenderer for ButtonRenderer {
         states: &WidgetStates,
     ) {
         let button_state = states.get::<ButtonState>(node).unwrap();
-        // let sprite = new_sprite_renderer(if button_state.pressed {
-        //     ui.assets.button_pressed
-        // } else {
-        //     ui.assets.button
-        // })
-        // .render(ui_batch, ui, node, geometry, states);
+        let sprite = new_sprite_renderer(if button_state.pressed {
+            ui.assets.button_pressed
+        } else {
+            ui.assets.button
+        })
+        .render(ui_batch, ui, node, geometry, states);
 
-        button_state.text.render(ui_batch, ui, node, geometry, states);
+        button_state
+            .text
+            .render(ui_batch, ui, node, geometry, states);
     }
 }
 
@@ -59,7 +61,7 @@ pub fn create_button(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
         Point2::new(padding, padding),
         "abcdefghijklmnopqrstuvwxyz",
         &ui.assets.medium_font,
-        Color::WHITE,
+        Color::BLACK,
     );
 
     ui.new_node(
@@ -70,6 +72,9 @@ pub fn create_button(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
         },
         Box::new(ButtonRenderer),
         Box::new(ButtonHandler),
-        Some(Box::new(ButtonState { pressed: false, text })),
+        Some(Box::new(ButtonState {
+            pressed: false,
+            text,
+        })),
     )
 }
