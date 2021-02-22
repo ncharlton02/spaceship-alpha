@@ -1,6 +1,6 @@
 use cgmath::{Point2, Vector2, Vector4};
 
-use crate::graphics::{FontGlyph, FontMap, TextureRegion2D, UiAssets, UiBatch};
+use crate::graphics::{FontGlyph, FontMap, NinePatch, TextureRegion2D, UiAssets, UiBatch};
 use generational_arena::Arena;
 use std::any::Any;
 use winit::event;
@@ -8,7 +8,6 @@ use winit::event;
 pub use button::*;
 
 mod button;
-pub mod widget_textures;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(generational_arena::Index);
@@ -212,6 +211,15 @@ pub fn new_sprite_renderer(texture: TextureRegion2D) -> Box<SpriteRenderer> {
     })
 }
 
+pub fn new_ninepatch_renderer(patch: NinePatch) -> Box<NinepatchRenderer> {
+    Box::new(NinepatchRenderer {
+        patch,
+        color: Color::WHITE,
+        offset: Point2::new(0.0, 0.0),
+        scale: Point2::new(1.0, 1.0),
+    })
+}
+
 pub trait NodeRenderer {
     fn render(
         &self,
@@ -256,6 +264,92 @@ impl NodeRenderer for SpriteRenderer {
             self.texture,
             Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a),
         );
+    }
+}
+
+pub struct NinepatchRenderer {
+    patch: NinePatch,
+    color: Color,
+    offset: Point2<f32>,
+    scale: Point2<f32>,
+}
+
+impl NodeRenderer for NinepatchRenderer {
+    fn render(
+        &self,
+        ui_batch: &mut UiBatch,
+        _: &Ui,
+        _: NodeId,
+        geometry: &NodeGeometry,
+        _: &WidgetStates,
+    ) {
+        let x = geometry.pos.x + self.offset.x;
+        let y = geometry.pos.y + self.offset.y;
+        let width = geometry.size.x * self.scale.x;
+        let height = geometry.size.y * self.scale.y;
+        let color = Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a);
+        let patch = self.patch;
+
+        let bottom_left_pos =
+            Vector4::new(x, y, patch.bottom_left.size.x, patch.bottom_left.size.y);
+        let top_left_pos = Vector4::new(
+            x,
+            y + height - patch.top_left.size.y,
+            patch.top_left.size.x,
+            patch.top_left.size.y,
+        );
+        let bottom_right_pos = Vector4::new(
+            x + width - patch.bottom_right.size.x,
+            y,
+            patch.bottom_right.size.x,
+            patch.bottom_right.size.y,
+        );
+        let top_right_pos = Vector4::new(
+            x + width - patch.top_right.size.x,
+            y + height - patch.top_right.size.y,
+            patch.top_right.size.x,
+            patch.top_right.size.y,
+        );
+        let middle_left_pos = Vector4::new(
+            x,
+            y + bottom_left_pos.w,
+            bottom_left_pos.z,
+            height - top_left_pos.w - bottom_left_pos.w,
+        );
+        let middle_right_pos = Vector4::new(
+            x + width - bottom_right_pos.z,
+            y + bottom_left_pos.w,
+            bottom_right_pos.z,
+            height - bottom_left_pos.w - top_left_pos.w,
+        );
+        let bottom_center_pos = Vector4::new(
+            x + bottom_left_pos.z,
+            y,
+            width - bottom_left_pos.z - bottom_right_pos.z,
+            bottom_left_pos.w,
+        );
+        let top_center_pos = Vector4::new(
+            x + bottom_left_pos.z,
+            y + height - top_left_pos.w,
+            width - bottom_left_pos.z - bottom_right_pos.z,
+            top_right_pos.w,
+        );
+        let middle_center_pos = Vector4::new(
+            x + bottom_left_pos.z,
+            y + bottom_left_pos.w,
+            width - middle_left_pos.z - middle_right_pos.z,
+            height - bottom_center_pos.w - top_center_pos.w,
+        );
+
+        ui_batch.draw(bottom_left_pos, patch.bottom_left, color);
+        ui_batch.draw(top_left_pos, patch.top_left, color);
+        ui_batch.draw(bottom_right_pos, patch.bottom_right, color);
+        ui_batch.draw(top_right_pos, patch.top_right, color);
+        ui_batch.draw(middle_left_pos, patch.middle_left, color);
+        ui_batch.draw(middle_right_pos, patch.middle_right, color);
+        ui_batch.draw(bottom_center_pos, patch.bottom_center, color);
+        ui_batch.draw(top_center_pos, patch.top_center, color);
+        ui_batch.draw(middle_center_pos, patch.middle_center, color);
     }
 }
 

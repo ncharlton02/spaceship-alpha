@@ -14,7 +14,7 @@ impl NodeRenderer for ButtonRenderer {
         states: &WidgetStates,
     ) {
         let button_state = states.get::<ButtonState>(node).unwrap();
-        let sprite = new_sprite_renderer(if button_state.pressed {
+        new_ninepatch_renderer(if button_state.pressed {
             ui.assets.button_pressed
         } else {
             ui.assets.button
@@ -56,12 +56,12 @@ struct ButtonState {
 }
 
 pub fn create_button(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
-    let padding = 10.0;
+    let padding = 12.0;
     let text = TextLayout::new(
         Point2::new(padding, padding),
-        "abcdefghijklmnopqrstuvwxyz",
+        "Hello World!",
         &ui.assets.medium_font,
-        Color::BLACK,
+        Color::WHITE,
     );
 
     ui.new_node(

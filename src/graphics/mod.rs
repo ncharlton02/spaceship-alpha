@@ -603,7 +603,7 @@ impl Camera {
     }
 }
 
-pub fn read_file_bytes(path: &'static str) -> Vec<u8> {
+pub fn read_file_bytes(path: &str) -> Vec<u8> {
     if let Ok(bytes) = std::fs::read(path) {
         bytes
     } else {

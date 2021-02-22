@@ -1,4 +1,3 @@
-use crate::ui::widget_textures;
 use cgmath::{Point2, Vector4};
 use image::GenericImageView;
 use rusttype::{Font, Scale};
@@ -36,10 +35,9 @@ pub struct UiRenderer {
     pub batch: UiBatch,
 }
 
-#[derive(Clone)]
 pub struct UiAssets {
-    pub button: TextureRegion2D,
-    pub button_pressed: TextureRegion2D,
+    pub button: NinePatch,
+    pub button_pressed: NinePatch,
     pub medium_font: FontMap,
 }
 
@@ -67,10 +65,11 @@ impl UiRenderer {
             flags: wgpu::ShaderFlags::VALIDATION,
         });
 
+        // TODO: Move asset loading to ui code
         let mut texture_atlas = TextureAtlas::new(device);
         let assets = UiAssets {
-            button: texture_atlas.load_texture("assets/ui/widgets/button.png"),
-            button_pressed: texture_atlas.load_texture("assets/ui/widgets/button_pressed.png"),
+            button: texture_atlas.load_ninepatch("assets/ui/widgets/button.9.png"),
+            button_pressed: texture_atlas.load_ninepatch("assets/ui/widgets/button_pressed.9.png"),
             medium_font: texture_atlas.load_font("assets/ui/fonts/montserrat-medium.ttf"),
         };
         texture_atlas.update_gpu_texture(device, queue);
@@ -273,6 +272,19 @@ impl FontMap {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct NinePatch {
+    pub bottom_left: TextureRegion2D,
+    pub bottom_center: TextureRegion2D,
+    pub bottom_right: TextureRegion2D,
+    pub middle_left: TextureRegion2D,
+    pub middle_center: TextureRegion2D,
+    pub middle_right: TextureRegion2D,
+    pub top_left: TextureRegion2D,
+    pub top_center: TextureRegion2D,
+    pub top_right: TextureRegion2D,
+}
+
 pub struct TextureAtlas {
     pub size: Option<Point2<f32>>,
     pub bind_group: Option<wgpu::BindGroup>,
@@ -333,6 +345,94 @@ impl TextureAtlas {
             bind_group: None,
             size: None,
             texture_count: 0,
+        }
+    }
+
+    pub fn load_ninepatch(&mut self, path: &'static str) -> NinePatch {
+        let bytes = super::read_file_bytes(path);
+        let image = image::load_from_memory(&bytes).unwrap();
+        let image_rgba = image.as_rgba8().unwrap();
+        let (width, height) = image.dimensions();
+
+        let mut x_space: Option<(u32, u32)> = None;
+        let mut y_space: Option<(u32, u32)> = None;
+        for x in 0..width {
+            if image_rgba.get_pixel(x, 0).0 == [0, 0, 0, 255] {
+                if let Some(x_space) = &mut x_space {
+                    x_space.1 = x;
+                } else {
+                    x_space = Some((x, 0));
+                }
+            }
+        }
+        for y in 0..height {
+            if image_rgba.get_pixel(0, y).0 == [0, 0, 0, 255] {
+                if let Some(y_space) = &mut y_space {
+                    y_space.1 = y;
+                } else {
+                    y_space = Some((y, 0));
+                }
+            }
+        }
+
+        let mut add_subtexture = |name: &'static str, pt1: Point2<u32>, pt2: Point2<u32>| {
+            let sub_image = copy_subtexture(&image_rgba, pt1, pt2);
+
+            self.add_texture(&format!("{}-{}", path, name), sub_image)
+        };
+        let x_space = x_space.expect("Invalid Ninepatch: No X-Axis Marker!");
+        let y_space = y_space.expect("Invalid Ninepatch: No Y-Axis Marker!");
+        println!("NinepatchX: {:?}", x_space);
+        println!("NinepatchY: {:?}", y_space);
+
+        //We need to go from pixel (1, 1) to (width - 1, height -1) to
+        //remove the marker pixel
+        NinePatch {
+            bottom_left: add_subtexture(
+                "BottomLeft",
+                Point2::new(1, 1),
+                Point2::new(x_space.0, y_space.0),
+            ),
+            bottom_center: add_subtexture(
+                "BottomCenter",
+                Point2::new(x_space.0, 1),
+                Point2::new(x_space.1, y_space.0),
+            ),
+            bottom_right: add_subtexture(
+                "BottomRight",
+                Point2::new(x_space.1, 1),
+                Point2::new(width - 1, y_space.0),
+            ),
+            middle_left: add_subtexture(
+                "MiddleLeft",
+                Point2::new(1, y_space.0),
+                Point2::new(x_space.0, y_space.1),
+            ),
+            middle_center: add_subtexture(
+                "MiddleCenter",
+                Point2::new(x_space.0, y_space.0),
+                Point2::new(x_space.1, y_space.1),
+            ),
+            middle_right: add_subtexture(
+                "MiddleRight",
+                Point2::new(x_space.1, y_space.0),
+                Point2::new(width - 1, y_space.1),
+            ),
+            top_left: add_subtexture(
+                "TopLeft",
+                Point2::new(1, y_space.1),
+                Point2::new(x_space.0, height - 1),
+            ),
+            top_center: add_subtexture(
+                "TopCenter",
+                Point2::new(x_space.0, y_space.1),
+                Point2::new(x_space.1, height - 1),
+            ),
+            top_right: add_subtexture(
+                "TopRight",
+                Point2::new(x_space.1, y_space.1),
+                Point2::new(width - 1, height - 1),
+            ),
         }
     }
 
@@ -407,24 +507,20 @@ impl TextureAtlas {
                     },
                 }
             });
-        
+
         let map = FONT_CHARACTERS.chars().zip(font_glyphs).collect();
 
         FontMap { font, scale, map }
     }
 
-    pub fn load_texture(&mut self, path: &'static str) -> TextureRegion2D {
+    pub fn load_texture(&mut self, path: &str) -> TextureRegion2D {
         let bytes = super::read_file_bytes(path);
         let image = image::load_from_memory(&bytes).unwrap();
 
         self.add_texture(path, image)
     }
 
-    pub fn add_texture(
-        &mut self,
-        name: &'static str,
-        image: image::DynamicImage,
-    ) -> TextureRegion2D {
+    pub fn add_texture(&mut self, name: &str, image: image::DynamicImage) -> TextureRegion2D {
         self.packer.pack_own(name.to_owned(), image);
         let frame = self
             .packer
@@ -497,4 +593,22 @@ impl TextureAtlas {
         println!("Updated Texture Atlas! Index = {}", self.texture_count);
         self.texture_count += 1;
     }
+}
+
+fn copy_subtexture(
+    original: &image::RgbaImage,
+    p1: Point2<u32>,
+    p2: Point2<u32>,
+) -> image::DynamicImage {
+    let width = p2.x - p1.x;
+    let height = p2.y - p1.y;
+    let mut new = image::DynamicImage::new_rgba8(width, height).to_rgba();
+
+    for x in 0..width {
+        for y in 0..height {
+            new.put_pixel(x, y, *original.get_pixel(x + p1.x, y + p1.y));
+        }
+    }
+
+    image::DynamicImage::ImageRgba8(new)
 }
