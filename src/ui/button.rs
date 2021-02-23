@@ -1,6 +1,9 @@
 use super::*;
 use cgmath::{Point2, Point3};
+use std::cell::RefCell;
 use winit::event;
+
+const PADDING: f32 = 8.0;
 
 struct ButtonRenderer;
 
@@ -21,9 +24,9 @@ impl NodeRenderer for ButtonRenderer {
         })
         .render(ui_batch, ui, node, geometry, states);
 
-        button_state
-            .text
-            .render(ui_batch, ui, node, geometry, states);
+        let mut text = button_state.text.borrow_mut();
+        text.offset.x = (geometry.size.x / 2.0) - (text.width / 2.0);
+        text.render(ui_batch, ui, node, geometry, states);
     }
 }
 
@@ -52,29 +55,30 @@ impl NodeHandler for ButtonHandler {
 
 struct ButtonState {
     pressed: bool,
-    text: TextLayout,
+    text: RefCell<TextLayout>,
 }
 
-pub fn create_button(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
-    let padding = 12.0;
+pub fn create_button(ui: &mut Ui, parent: Option<NodeId>, text: &str) -> NodeId {
     let text = TextLayout::new(
-        Point2::new(padding, padding),
-        "Hello World!",
+        Point2::new(PADDING, PADDING),
+        text,
         &ui.assets.medium_font,
         Color::WHITE,
     );
+    let min_size = Point2::new(text.width + PADDING * 2.0, text.height + PADDING * 2.0);
 
     ui.new_node(
         parent,
         NodeGeometry {
             pos: Point2::new(0.0, 0.0),
-            size: Point2::new(text.width + padding * 2.0, text.height + padding * 2.0),
+            size: min_size,
         },
+        NodeLayout { min_size },
         Box::new(ButtonRenderer),
         Box::new(ButtonHandler),
         Some(Box::new(ButtonState {
             pressed: false,
-            text,
+            text: RefCell::new(text),
         })),
     )
 }

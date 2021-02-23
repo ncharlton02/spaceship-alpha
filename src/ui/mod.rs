@@ -5,9 +5,8 @@ use generational_arena::Arena;
 use std::any::Any;
 use winit::event;
 
-pub use button::*;
-
 mod button;
+mod stack;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(generational_arena::Index);
@@ -26,6 +25,23 @@ pub struct NodeGeometry {
     pub pos: Point2<f32>,
     pub size: Point2<f32>,
 }
+
+pub struct NodeLayout {
+    pub min_size: Point2<f32>,
+}
+
+impl Default for NodeLayout {
+    fn default() -> Self {
+        Self {
+            min_size: Point2::new(0.0, 0.0),
+        }
+    }
+}
+
+pub type WidgetLayouts = Vec<NodeLayout>;
+pub type WidgetGeometries = Arena<NodeGeometry>;
+pub type WidgetChildren = Vec<Vec<NodeId>>;
+pub type WidgetHandlers = Vec<Box<dyn NodeHandler>>;
 
 pub struct WidgetStates {
     states: Vec<Option<Box<dyn Any>>>,
@@ -62,10 +78,11 @@ impl WidgetStates {
 }
 
 pub struct Ui {
-    geometries: Arena<NodeGeometry>,
+    geometries: WidgetGeometries,
+    layouts: WidgetLayouts,
     parents: Vec<Option<NodeId>>,
-    children: Vec<Vec<NodeId>>,
-    handlers: Vec<Box<dyn NodeHandler>>,
+    children: WidgetChildren,
+    handlers: WidgetHandlers,
     renderers: Vec<Box<dyn NodeRenderer>>,
     states: WidgetStates,
     assets: UiAssets,
@@ -76,6 +93,7 @@ impl Ui {
     pub fn new(assets: UiAssets) -> Self {
         let mut ui = Self {
             geometries: Arena::new(),
+            layouts: WidgetLayouts::new(),
             parents: Vec::new(),
             children: Vec::new(),
             renderers: Vec::new(),
@@ -85,17 +103,11 @@ impl Ui {
             assets,
         };
 
-        let root = create_button(&mut ui, None);
-        let _child = ui.new_node(
-            Some(root),
-            NodeGeometry {
-                pos: Point2::new(0.0, 0.0),
-                size: Point2::new(1.0, 1.0),
-            },
-            Box::new(EmptyRenderer),
-            Box::new(EmptyNodeHandler),
-            None,
-        );
+        let stack = stack::create_stack(&mut ui, None);
+        button::create_button(&mut ui, Some(stack), "Hello!");
+        let outer_stack = stack::create_stack(&mut ui, Some(stack));
+        button::create_button(&mut ui, Some(outer_stack), "Middle!");
+        button::create_button(&mut ui, Some(outer_stack), "Goodbye!");
 
         ui
     }
@@ -104,11 +116,13 @@ impl Ui {
         &mut self,
         parent: Option<NodeId>,
         geometry: NodeGeometry,
+        layout: NodeLayout,
         renderer: Box<dyn NodeRenderer>,
         handler: Box<dyn NodeHandler>,
         state: Option<Box<dyn Any>>,
     ) -> NodeId {
         let id = NodeId(self.geometries.insert(geometry));
+        insert_or_replace(&mut self.layouts, id, layout);
         insert_or_replace(&mut self.parents, id, parent);
         insert_or_replace(&mut self.children, id, Vec::new());
         insert_or_replace(&mut self.renderers, id, renderer);
@@ -128,6 +142,7 @@ impl Ui {
         self.check_id(id, "Failed to remove node!");
 
         self.geometries.remove(id.arena_index());
+        self.layouts[id.index()] = NodeLayout::default();
         self.parents[id.index()] = None;
         self.renderers[id.index()] = Box::new(EmptyRenderer);
         self.handlers[id.index()] = Box::new(EmptyNodeHandler);
@@ -186,6 +201,28 @@ impl Ui {
         }
     }
 
+    pub fn update(&mut self) {
+        let mut parentless = Vec::new();
+
+        for (id, _) in self.geometries.iter() {
+            if self.parents.get(id.into_raw_parts().0).unwrap().is_none() {
+                parentless.push(NodeId(id));
+            }
+        }
+
+        let layout_manager = LayoutManager(&self.children, &self.handlers);
+        for id in parentless {
+            self.handlers[id.index()].layout(
+                &layout_manager,
+                id,
+                &self.children[id.index()],
+                &mut self.geometries,
+                &mut self.layouts,
+                &mut self.states,
+            );
+        }
+    }
+
     #[track_caller]
     fn check_id(&self, id: NodeId, desc: &str) {
         if !self.geometries.contains(id.arena_index()) {
@@ -193,6 +230,8 @@ impl Ui {
         }
     }
 }
+
+pub fn layout_children() {}
 
 pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
     if vec.len() < id.index() {
@@ -426,7 +465,41 @@ impl NodeRenderer for TextLayout {
     }
 }
 
+pub struct LayoutManager<'a>(&'a WidgetChildren, &'a WidgetHandlers);
+
+impl LayoutManager<'_> {
+    pub fn layout_all(
+        &self,
+        nodes: &[NodeId],
+        geometries: &mut WidgetGeometries,
+        layouts: &mut WidgetLayouts,
+        states: &mut WidgetStates,
+    ) {
+        for node in nodes {
+            self.1[node.index()].layout(
+                &self,
+                *node,
+                &self.0[node.index()],
+                geometries,
+                layouts,
+                states,
+            )
+        }
+    }
+}
+
 pub trait NodeHandler {
+    fn layout<'a>(
+        &self,
+        _: &'a LayoutManager,
+        _: NodeId,
+        _: &[NodeId],
+        _: &mut WidgetGeometries,
+        _: &mut WidgetLayouts,
+        _: &mut WidgetStates,
+    ) {
+    }
+
     fn on_click(
         &self,
         _: event::MouseButton,
