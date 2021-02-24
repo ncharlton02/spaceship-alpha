@@ -25,7 +25,6 @@ impl NodeHandler for StackHandler {
             width = width.max(min_size.x);
             height += min_size.y + spacing;
         }
-        width += spacing * 2.0;
 
         let mut pos = geometries[node.arena_index()].pos;
         pos.x += spacing;
@@ -38,6 +37,7 @@ impl NodeHandler for StackHandler {
             pos.y += geometry.size.y + spacing;
         }
         
+        width += spacing * 2.0;
         layouts[node.index()].min_size = Point2::new(width, height);
         geometries[node.arena_index()].size = Point2::new(width, height);
     }
@@ -51,7 +51,7 @@ pub fn create_stack(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
             size: Point2::new(0.0, 0.0),
         },
         NodeLayout::default(),
-        Box::new(EmptyRenderer),
+        new_ninepatch_renderer(ui.assets.pane),
         Box::new(StackHandler),
         None,
     )

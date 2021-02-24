@@ -155,10 +155,22 @@ impl Ui {
 
     pub fn render(&self, sprite_batch: &mut UiBatch) {
         sprite_batch.reset();
-        self.geometries.iter().for_each(|(id, geometry)| {
-            let renderer = self.renderers.get(id.into_raw_parts().0).unwrap();
-            renderer.render(sprite_batch, &self, NodeId(id), geometry, &self.states)
-        });
+
+        fn render_all(sprite_batch: &mut UiBatch, ui: &Ui, nodes: &[NodeId]) {
+            for node in nodes {
+                ui.renderers[node.index()].render(
+                    sprite_batch,
+                    &ui,
+                    *node,
+                    &ui.geometries[node.arena_index()],
+                    &ui.states,
+                );
+
+                render_all(sprite_batch, ui, &ui.children[node.index()]);
+            }
+        };
+
+        render_all(sprite_batch, &self, &self.find_parentless_nodes());
     }
 
     pub fn on_click(
@@ -202,15 +214,10 @@ impl Ui {
     }
 
     pub fn update(&mut self) {
-        let mut parentless = Vec::new();
-
-        for (id, _) in self.geometries.iter() {
-            if self.parents.get(id.into_raw_parts().0).unwrap().is_none() {
-                parentless.push(NodeId(id));
-            }
-        }
-
+        let parentless = self.find_parentless_nodes();
         let layout_manager = LayoutManager(&self.children, &self.handlers);
+
+        // TODO: Do not layout every frame
         for id in parentless {
             self.handlers[id.index()].layout(
                 &layout_manager,
@@ -221,6 +228,14 @@ impl Ui {
                 &mut self.states,
             );
         }
+    }
+
+    fn find_parentless_nodes(&self) -> Vec<NodeId> {
+        self.geometries
+            .iter()
+            .map(|(id, _)| NodeId(id))
+            .filter(|id| self.parents[id.index()].is_none())
+            .collect()
     }
 
     #[track_caller]

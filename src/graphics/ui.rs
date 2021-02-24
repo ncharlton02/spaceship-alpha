@@ -39,6 +39,7 @@ pub struct UiAssets {
     pub button: NinePatch,
     pub button_pressed: NinePatch,
     pub medium_font: FontMap,
+    pub pane: NinePatch,
 }
 
 impl UiRenderer {
@@ -71,6 +72,7 @@ impl UiRenderer {
             button: texture_atlas.load_ninepatch("assets/ui/widgets/button.9.png"),
             button_pressed: texture_atlas.load_ninepatch("assets/ui/widgets/button_pressed.9.png"),
             medium_font: texture_atlas.load_font("assets/ui/fonts/montserrat-medium.ttf"),
+            pane: texture_atlas.load_ninepatch("assets/ui/widgets/pane.9.png"),
         };
         texture_atlas.update_gpu_texture(device, queue);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
