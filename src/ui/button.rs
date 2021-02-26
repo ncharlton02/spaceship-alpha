@@ -36,14 +36,20 @@ impl NodeHandler for ButtonHandler {
     fn on_click(
         &self,
         _: event::MouseButton,
-        state: event::ElementState,
+        click_state: event::ElementState,
         _: Point2<f32>,
         node: NodeId,
         _: &mut NodeGeometry,
         states: &mut WidgetStates,
+        events: &mut EventQueue,
     ) -> bool {
-        let focus = state == event::ElementState::Pressed;
-        states.get_mut::<ButtonState>(node).unwrap().pressed = focus;
+        let focus = click_state == event::ElementState::Pressed;
+        let mut button_state = states.get_mut::<ButtonState>(node).unwrap();
+        button_state.pressed = focus;
+
+        if focus {
+            events.add(button_state.on_action.clone());
+        }
 
         focus
     }
@@ -56,9 +62,15 @@ impl NodeHandler for ButtonHandler {
 struct ButtonState {
     pressed: bool,
     text: RefCell<TextLayout>,
+    on_action: EventHandler,
 }
 
-pub fn create_button(ui: &mut Ui, parent: Option<NodeId>, text: &str) -> NodeId {
+pub fn create_button(
+    ui: &mut Ui,
+    parent: Option<NodeId>,
+    text: &str,
+    on_action: EventHandler,
+) -> NodeId {
     let text = TextLayout::new(
         Point2::new(PADDING, PADDING),
         text,
@@ -77,6 +89,7 @@ pub fn create_button(ui: &mut Ui, parent: Option<NodeId>, text: &str) -> NodeId 
         Box::new(ButtonRenderer),
         Box::new(ButtonHandler),
         Some(Box::new(ButtonState {
+            on_action,
             pressed: false,
             text: RefCell::new(text),
         })),

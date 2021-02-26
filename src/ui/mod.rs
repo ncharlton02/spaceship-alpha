@@ -1,8 +1,10 @@
 use cgmath::{Point2, Vector2, Vector4};
 
+use crate::entity::ECS;
 use crate::graphics::{FontGlyph, FontMap, NinePatch, TextureRegion2D, UiAssets, UiBatch};
 use generational_arena::Arena;
 use std::any::Any;
+use std::rc::Rc;
 use winit::event;
 
 mod button;
@@ -42,6 +44,15 @@ pub type WidgetLayouts = Vec<NodeLayout>;
 pub type WidgetGeometries = Arena<NodeGeometry>;
 pub type WidgetChildren = Vec<Vec<NodeId>>;
 pub type WidgetHandlers = Vec<Box<dyn NodeHandler>>;
+pub type EventHandler = Rc<dyn Fn(&mut Ui, &mut ECS)>;
+
+pub struct EventQueue(Vec<EventHandler>);
+
+impl EventQueue {
+    pub fn add(&mut self, handler: EventHandler) {
+        self.0.push(handler);
+    }
+}
 
 pub struct WidgetStates {
     states: Vec<Option<Box<dyn Any>>>,
@@ -87,6 +98,7 @@ pub struct Ui {
     states: WidgetStates,
     assets: UiAssets,
     mouse_focus: Option<NodeId>,
+    event_queue: EventQueue,
 }
 
 impl Ui {
@@ -100,14 +112,32 @@ impl Ui {
             handlers: Vec::new(),
             states: WidgetStates { states: Vec::new() },
             mouse_focus: None,
+            event_queue: EventQueue(Vec::new()),
             assets,
         };
 
         let stack = stack::create_stack(&mut ui, None);
-        button::create_button(&mut ui, Some(stack), "Hello!");
-        let outer_stack = stack::create_stack(&mut ui, Some(stack));
-        button::create_button(&mut ui, Some(outer_stack), "Middle!");
-        button::create_button(&mut ui, Some(outer_stack), "Goodbye!");
+        let b1 = button::create_button(
+            &mut ui,
+            Some(stack),
+            "Start Shooting",
+            Rc::new(|_, _| println!("Pew pew")),
+        );
+        let b2 = button::create_button(
+            &mut ui,
+            Some(stack),
+            "Start Mining",
+            Rc::new(|_, _| println!("Brr brr")),
+        );
+        let clear_ui = button::create_button(
+            &mut ui,
+            Some(stack),
+            "ClearUI",
+            Rc::new(move |ui, _| {
+                ui.remove_node(b1);
+                ui.remove_node(b2);
+            }),
+        );
 
         ui
     }
@@ -139,7 +169,13 @@ impl Ui {
 
     // Removes a node, and all of its children
     pub fn remove_node(&mut self, id: NodeId) {
-        self.check_id(id, "Failed to remove node!");
+        if !self.geometries.contains(id.arena_index()) {
+            return;
+        }
+
+        if let Some(parent) = self.parents[id.index()] {
+            self.children[parent.index()].retain(|child| *child != id);
+        }
 
         self.geometries.remove(id.arena_index());
         self.layouts[id.index()] = NodeLayout::default();
@@ -198,7 +234,15 @@ impl Ui {
             if let Some(handler) = self.handlers.get(index) {
                 let node_id = NodeId(id);
                 let geometry = self.geometries.get_mut(id).unwrap();
-                if handler.on_click(button, state, pt, node_id, geometry, &mut self.states) {
+                if handler.on_click(
+                    button,
+                    state,
+                    pt,
+                    node_id,
+                    geometry,
+                    &mut self.states,
+                    &mut self.event_queue,
+                ) {
                     new_focus = Some(node_id);
                     break;
                 }
@@ -213,7 +257,7 @@ impl Ui {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, ecs: &mut ECS) {
         let parentless = self.find_parentless_nodes();
         let layout_manager = LayoutManager(&self.children, &self.handlers);
 
@@ -228,6 +272,12 @@ impl Ui {
                 &mut self.states,
             );
         }
+
+        // Temporarily replace event queue with a zero sized Vec
+        let mut events = std::mem::replace(&mut self.event_queue.0, Vec::with_capacity(0));
+        events.iter().for_each(|event| (event)(self, ecs));
+        events.clear();
+        std::mem::replace(&mut self.event_queue.0, events);
     }
 
     fn find_parentless_nodes(&self) -> Vec<NodeId> {
@@ -523,6 +573,7 @@ pub trait NodeHandler {
         _: NodeId,
         _: &mut NodeGeometry,
         _: &mut WidgetStates,
+        _: &mut EventQueue,
     ) -> bool {
         false
     }

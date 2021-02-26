@@ -36,7 +36,7 @@ impl NodeHandler for StackHandler {
             geometry.size.x = width;
             pos.y += geometry.size.y + spacing;
         }
-        
+
         width += spacing * 2.0;
         layouts[node.index()].min_size = Point2::new(width, height);
         geometries[node.arena_index()].size = Point2::new(width, height);

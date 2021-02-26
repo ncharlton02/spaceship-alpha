@@ -154,6 +154,7 @@ impl app::Application for AppState {
 
     fn fixed_update(&mut self, _: &wgpu::Device, _: &wgpu::Queue) {
         self.update_camera();
+        self.ui.update(&mut self.ecs);
         self.ecs.update();
 
         let pt = if let Some(pt) = self.left_click {
@@ -192,7 +193,6 @@ impl app::Application for AppState {
         }
 
         let mut mesh_manager = self.ecs.world.fetch_mut::<MeshManager>();
-        self.ui.update();
         self.ui.render(&mut self.renderer.ui_renderer.batch);
 
         let mut encoder =
