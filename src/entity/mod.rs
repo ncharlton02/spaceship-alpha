@@ -1,11 +1,13 @@
-use crate::graphics::{MeshId, MeshManager, ModelId};
-use crate::{block::Blocks, floor::Floors, InputAction};
-use cgmath::{prelude::*, Matrix4, Point3, Quaternion, Vector3};
+use crate::graphics::{Camera, MeshId, MeshManager, ModelId};
+use crate::{block::Blocks, floor::Floors};
+use cgmath::{prelude::*, Matrix4, Point2, Point3, Quaternion, Vector3};
+pub use input::{InputAction, InputManager};
 pub use objects::ObjectMeshes;
 pub use physics::{Collider, ColliderShape, Hitbox, RaycastWorld, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
 use specs::{prelude::*, shred::Fetch, storage::MaskedStorage, Component};
 
+pub mod input;
 pub mod objects;
 pub mod physics;
 pub mod ship;
@@ -93,6 +95,8 @@ impl<'a> ECS<'a> {
         mut mesh_manager: MeshManager,
         blocks: Blocks,
         floors: Floors,
+        camera: Camera,
+        window_size: WindowSize,
     ) -> Self {
         let meshes = ObjectMeshes::load(device, &mut mesh_manager);
         let hitbox_meshes = physics::HitboxMeshes::load(device, &mut mesh_manager);
@@ -110,8 +114,10 @@ impl<'a> ECS<'a> {
         world.insert(mesh_manager);
         world.insert(blocks);
         world.insert(floors);
+        world.insert(camera);
+        world.insert(window_size);
         world.insert(RaycastWorld::new());
-        world.insert(InputAction::None);
+        world.insert(InputManager::new());
         objects::register_components(&mut world);
         crate::block::register_components(&mut world);
 
@@ -126,7 +132,10 @@ impl<'a> ECS<'a> {
             }
         };
 
-        let mut dispatcher_builder = DispatcherBuilder::new();
+        let mut dispatcher_builder = DispatcherBuilder::new()
+            .with(input::CameraSystem, "camera_system", &[])
+            .with(input::InputSystem, "input_system", &["camera_system"]);
+        dispatcher_builder.add_barrier();
         crate::block::setup_systems(&mut dispatcher_builder);
         objects::setup_systems(&mut dispatcher_builder);
         dispatcher_builder.add_barrier();
@@ -144,10 +153,6 @@ impl<'a> ECS<'a> {
         objects::create_asteroid(&mut world);
 
         ECS { world, dispatcher }
-    }
-
-    pub fn set_input_action(&mut self, action: InputAction) {
-        self.world.insert(action);
     }
 
     pub fn update(&mut self) {
@@ -208,6 +213,14 @@ impl<'a> ECS<'a> {
         self.world
             .fetch::<RaycastWorld>()
             .raycast(whitelist, near, far)
+    }
+
+    pub fn get_resource_mut<T: 'static + Sync + Send>(&self) -> specs::shred::FetchMut<T> {
+        self.world.write_resource::<T>()
+    }
+
+    pub fn get_resource<T: 'static + Sync + Send>(&self) -> specs::shred::Fetch<T> {
+        self.world.read_resource::<T>()
     }
 }
 
@@ -272,3 +285,14 @@ pub struct Line {
 
 unsafe impl bytemuck::Pod for Line {}
 unsafe impl bytemuck::Zeroable for Line {}
+
+pub struct WindowSize {
+    pub width: f32,
+    pub height: f32,
+}
+
+impl WindowSize {
+    fn as_point(&self) -> Point2<f32> {
+        Point2::new(self.width, self.height)
+    }
+}

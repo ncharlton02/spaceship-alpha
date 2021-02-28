@@ -10,6 +10,8 @@ use winit::event;
 mod button;
 mod stack;
 
+mod in_game;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(generational_arena::Index);
 
@@ -116,28 +118,7 @@ impl Ui {
             assets,
         };
 
-        let stack = stack::create_stack(&mut ui, None);
-        let b1 = button::create_button(
-            &mut ui,
-            Some(stack),
-            "Start Shooting",
-            Rc::new(|_, _| println!("Pew pew")),
-        );
-        let b2 = button::create_button(
-            &mut ui,
-            Some(stack),
-            "Start Mining",
-            Rc::new(|_, _| println!("Brr brr")),
-        );
-        let clear_ui = button::create_button(
-            &mut ui,
-            Some(stack),
-            "ClearUI",
-            Rc::new(move |ui, _| {
-                ui.remove_node(b1);
-                ui.remove_node(b2);
-            }),
-        );
+        in_game::create_in_game_ui(&mut ui);
 
         ui
     }
@@ -214,7 +195,7 @@ impl Ui {
         button: event::MouseButton,
         state: event::ElementState,
         pt: Point2<f32>,
-    ) {
+    ) -> bool {
         let widgets: Vec<generational_arena::Index> = self
             .geometries
             .iter()
@@ -255,6 +236,8 @@ impl Ui {
                 self.handlers[prev_focus.index()].on_mouse_focus_lost(prev_focus, &mut self.states);
             }
         }
+
+        return new_focus.is_some();
     }
 
     pub fn update(&mut self, ecs: &mut ECS) {

@@ -2,7 +2,7 @@
 extern crate lazy_static;
 
 use cgmath::{prelude::*, Point2, Vector3};
-use entity::{Collider, ECS};
+use entity::{Collider, InputAction, InputManager, WindowSize, ECS};
 use graphics::{Camera, MeshManager, Renderer};
 use specs::prelude::*;
 use std::collections::HashSet;
@@ -24,45 +24,9 @@ mod ui;
 
 struct AppState {
     renderer: Renderer,
-    camera: Camera,
     ecs: entity::ECS<'static>,
-    keys: Keys,
-    window_size: Point2<f32>,
     left_click: Option<Point2<f32>>,
     ui: Ui,
-}
-
-impl AppState {
-    fn update_camera(&mut self) {
-        let rotate_speed = 0.02;
-        let move_speed = 0.16;
-
-        if self.keys.is_key_down(event::VirtualKeyCode::Q) {
-            self.camera.yaw += rotate_speed;
-        } else if self.keys.is_key_down(event::VirtualKeyCode::E) {
-            self.camera.yaw -= rotate_speed;
-        }
-
-        let forward_power = if self.keys.is_key_down(event::VirtualKeyCode::W) {
-            1.0
-        } else if self.keys.is_key_down(event::VirtualKeyCode::S) {
-            -1.0
-        } else {
-            0.0
-        };
-        let side_power = if self.keys.is_key_down(event::VirtualKeyCode::D) {
-            -1.0
-        } else if self.keys.is_key_down(event::VirtualKeyCode::A) {
-            1.0
-        } else {
-            0.0
-        };
-
-        let (yaw_sin, yaw_cos) = self.camera.yaw.sin_cos();
-        let forward = Vector3::new(yaw_cos, yaw_sin, 0.0).normalize() * forward_power * move_speed;
-        let side = Vector3::new(-yaw_sin, yaw_cos, 0.0).normalize() * side_power * move_speed;
-        self.camera.position += forward + side;
-    }
 }
 
 impl app::Application for AppState {
@@ -84,19 +48,18 @@ impl app::Application for AppState {
             near: 0.1,
             far: 100.0,
         };
+        let window_size = WindowSize {
+            width: swapchain.width as f32,
+            height: swapchain.height as f32,
+        };
 
-        let ecs = ECS::new(device, mesh_manager, blocks, floors);
-        let keys = Keys(HashSet::new());
-        let window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
+        let ecs = ECS::new(device, mesh_manager, blocks, floors, camera, window_size);
         let ui = Ui::new(ui_assets);
         queue.submit(None);
 
         AppState {
             renderer,
-            camera,
             ecs,
-            keys,
-            window_size,
             ui,
             left_click: None,
         }
@@ -108,24 +71,27 @@ impl app::Application for AppState {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) {
-        self.camera.resize(swapchain);
+        self.ecs.get_resource_mut::<Camera>().resize(swapchain);
         self.renderer.resize(device, queue, swapchain);
-        self.window_size = Point2::new(swapchain.width as f32, swapchain.height as f32);
+
+        let mut window_size = self.ecs.get_resource_mut::<WindowSize>();
+        window_size.width = swapchain.width as f32;
+        window_size.height = swapchain.height as f32;
     }
 
     fn key_event(&mut self, key: event::VirtualKeyCode, state: event::ElementState) {
-        match state {
-            event::ElementState::Pressed => self.keys.0.insert(key),
-            event::ElementState::Released => self.keys.0.remove(&key),
-        };
+        self.ecs
+            .get_resource_mut::<InputManager>()
+            .keys
+            .update(key, state);
     }
 
     fn scroll_event(&mut self, _: f32) {}
 
     fn mouse_moved(&mut self, new_pos: Point2<f32>) {
-        if let Some(left_click) = &mut self.left_click {
-            *left_click = new_pos;
-        }
+        let window_size = self.ecs.get_resource::<WindowSize>();
+        let new_pos = Point2::new(new_pos.x, window_size.height - new_pos.y);
+        self.ecs.get_resource_mut::<InputManager>().mouse_pos = new_pos;
     }
 
     fn click_event(
@@ -134,48 +100,18 @@ impl app::Application for AppState {
         state: event::ElementState,
         mut pt: Point2<f32>,
     ) {
-        pt.y = self.window_size.y - pt.y;
-        self.ui.on_click(button, state, pt);
+        let window_size = self.ecs.get_resource::<WindowSize>();
+        pt.y = window_size.height - pt.y;
 
-        if button != event::MouseButton::Left {
-            return;
-        }
-
-        match state {
-            event::ElementState::Pressed => {
-                self.left_click = Some(pt);
-            }
-            event::ElementState::Released => {
-                self.left_click = None;
-                self.ecs.set_input_action(InputAction::None);
-            }
+        if !self.ui.on_click(button, state, pt) && button == event::MouseButton::Left {
+            let mut input_manager = self.ecs.get_resource_mut::<InputManager>();
+            input_manager.left_mb = state == event::ElementState::Pressed;
         }
     }
 
     fn fixed_update(&mut self, _: &wgpu::Device, _: &wgpu::Queue) {
-        self.update_camera();
         self.ui.update(&mut self.ecs);
         self.ecs.update();
-
-        let pt = if let Some(pt) = self.left_click {
-            pt
-        } else {
-            return;
-        };
-
-        let near = self
-            .camera
-            .unproject(Vector3::new(pt.x, pt.y, 0.0), self.window_size);
-        let far = self
-            .camera
-            .unproject(Vector3::new(pt.x, pt.y, 1.0), self.window_size);
-
-        let action = match self.ecs.raycast(vec![Collider::ASTEROID], near, far) {
-            Some(entity) => InputAction::Laser(entity),
-            None => InputAction::None,
-        };
-
-        self.ecs.set_input_action(action);
     }
 
     fn render(
@@ -186,13 +122,14 @@ impl app::Application for AppState {
     ) {
         let mut lines = Vec::new();
         let lines_comps = self.ecs.world.read_component::<entity::Line>();
-        let entities = self.ecs.world.fetch::<specs::world::EntitiesRes>();
+        let entities = self.ecs.get_resource::<specs::world::EntitiesRes>();
+        let camera = self.ecs.get_resource::<Camera>();
 
         for (line, _) in (&lines_comps, &entities).join() {
             lines.push(*line);
         }
 
-        let mut mesh_manager = self.ecs.world.fetch_mut::<MeshManager>();
+        let mut mesh_manager = self.ecs.get_resource_mut::<MeshManager>();
         self.ui.render(&mut self.renderer.ui_renderer.batch);
 
         let mut encoder =
@@ -203,7 +140,7 @@ impl app::Application for AppState {
             queue,
             texture,
             &mut encoder,
-            &self.camera,
+            &camera,
             &mut mesh_manager,
             &lines,
         );
@@ -236,10 +173,4 @@ pub fn print_time(title: &str) {
         % 1000;
 
     println!("{}: {}", title, time_ms);
-}
-
-pub enum InputAction {
-    Mining(Entity),
-    Laser(Entity),
-    None,
 }

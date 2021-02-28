@@ -1,9 +1,8 @@
 use crate::entity::{
     objects::{self, Health, ObjectMeshes},
-    ColliderShape, Hitbox, Line, RaycastWorld, Transform,
+    ColliderShape, Hitbox, InputAction, InputManager, Line, RaycastWorld, Transform,
 };
 use crate::graphics::{self, Mesh, MeshId, MeshManager};
-use crate::InputAction;
 use cgmath::{prelude::*, Point2, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
 
@@ -167,7 +166,7 @@ impl<'a> System<'a> for MinerSystem {
     type SystemData = (
         Entities<'a>,
         Read<'a, LazyUpdate>,
-        ReadExpect<'a, InputAction>,
+        ReadExpect<'a, InputManager>,
         ReadExpect<'a, ObjectMeshes>,
         WriteStorage<'a, Miner>,
         WriteStorage<'a, Transform>,
@@ -180,11 +179,13 @@ impl<'a> System<'a> for MinerSystem {
             transform.set_rotation_z(crate::PI);
 
             if miner.shoot_time > Miner::TOTAL_TIME {
-                if let InputAction::Mining(target) = *input {
-                    let position = transform.position + Vector3::new(0.0, 0.0, 0.5);
-                    let builder = lazy_update.create_entity(&entities);
-                    objects::build_mining_missle(&meshes, builder, target, position);
-                    miner.shoot_time = 0;
+                if input.action == InputAction::Mining {
+                    if let Some(target) = input.target {
+                        let position = transform.position + Vector3::new(0.0, 0.0, 0.5);
+                        let builder = lazy_update.create_entity(&entities);
+                        objects::build_mining_missle(&meshes, builder, target, position);
+                        miner.shoot_time = 0;
+                    }
                 }
             } else {
                 miner.shoot_time += 1;
@@ -206,7 +207,7 @@ pub struct LaserSystem;
 impl<'a> System<'a> for LaserSystem {
     type SystemData = (
         Entities<'a>,
-        ReadExpect<'a, InputAction>,
+        ReadExpect<'a, InputManager>,
         ReadExpect<'a, RaycastWorld>,
         WriteStorage<'a, Laser>,
         WriteStorage<'a, Line>,
@@ -217,8 +218,12 @@ impl<'a> System<'a> for LaserSystem {
     fn run(&mut self, data: Self::SystemData) {
         let (entities, input, raycaster, lasers, mut lines, mut healths, mut transforms) = data;
 
+        if input.action != InputAction::Laser {
+            return;
+        }
+
         for (entity, _) in (&entities, &lasers).join() {
-            if let InputAction::Laser(target) = *input {
+            if let Some(target) = input.target {
                 let target_pos = transforms.get(target).unwrap().position;
                 let transform = transforms.get_mut(entity).unwrap();
                 let mut start_pos = transform.position + Vector3::new(0.0, 0.0, 0.4);
