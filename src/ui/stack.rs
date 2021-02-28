@@ -1,6 +1,5 @@
 use super::*;
-use cgmath::{Point2, Point3};
-use winit::event;
+use cgmath::Point2;
 
 struct StackHandler;
 

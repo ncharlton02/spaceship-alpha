@@ -377,7 +377,6 @@ impl Renderer {
 
     pub fn render_world(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
         frame: &wgpu::SwapChainTexture,
         encoder: &mut wgpu::CommandEncoder,
@@ -444,7 +443,6 @@ impl Renderer {
 
     pub fn render_ui(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
         frame: &wgpu::SwapChainTexture,
         encoder: &mut wgpu::CommandEncoder,

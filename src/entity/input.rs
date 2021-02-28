@@ -116,6 +116,6 @@ impl<'a> System<'a> for InputSystem {
             InputAction::Mining | InputAction::Laser => Some(vec![Collider::ASTEROID]),
             _ => None,
         }
-        .and_then(|collider| raycaster.raycast(vec![Collider::ASTEROID], near, far));
+        .and_then(|collider| raycaster.raycast(collider, near, far));
     }
 }

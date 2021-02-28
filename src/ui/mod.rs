@@ -1,4 +1,4 @@
-use cgmath::{Point2, Vector2, Vector4};
+use cgmath::{Point2, Vector4};
 
 use crate::entity::ECS;
 use crate::graphics::{FontGlyph, FontMap, NinePatch, TextureRegion2D, UiAssets, UiBatch};
@@ -150,7 +150,7 @@ impl Ui {
 
     // Removes a node, and all of its children
     pub fn remove_node(&mut self, id: NodeId) {
-        if !self.geometries.contains(id.arena_index()) {
+        if !self.is_valid_id(id) {
             return;
         }
 
@@ -232,8 +232,9 @@ impl Ui {
 
         if self.mouse_focus != new_focus {
             if let Some(prev_focus) = std::mem::replace(&mut self.mouse_focus, new_focus) {
-                self.check_id(prev_focus, "Mouse focus has been removed!?");
-                self.handlers[prev_focus.index()].on_mouse_focus_lost(prev_focus, &mut self.states);
+                if self.is_valid_id(prev_focus) {
+                    self.handlers[prev_focus.index()].on_mouse_focus_lost(prev_focus, &mut self.states);
+                }
             }
         }
 
@@ -260,7 +261,7 @@ impl Ui {
         let mut events = std::mem::replace(&mut self.event_queue.0, Vec::with_capacity(0));
         events.iter().for_each(|event| (event)(self, ecs));
         events.clear();
-        std::mem::replace(&mut self.event_queue.0, events);
+        self.event_queue.0 = events;
     }
 
     fn find_parentless_nodes(&self) -> Vec<NodeId> {
@@ -271,6 +272,10 @@ impl Ui {
             .collect()
     }
 
+    fn is_valid_id(&self, id: NodeId) -> bool {
+        self.geometries.contains(id.arena_index()) 
+    }
+
     #[track_caller]
     fn check_id(&self, id: NodeId, desc: &str) {
         if !self.geometries.contains(id.arena_index()) {
@@ -278,8 +283,6 @@ impl Ui {
         }
     }
 }
-
-pub fn layout_children() {}
 
 pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
     if vec.len() < id.index() {
@@ -289,6 +292,7 @@ pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
     }
 }
 
+#[allow(dead_code)]
 pub fn new_sprite_renderer(texture: TextureRegion2D) -> Box<SpriteRenderer> {
     Box::new(SpriteRenderer {
         texture,
@@ -321,7 +325,7 @@ pub trait NodeRenderer {
 pub struct EmptyRenderer;
 
 impl NodeRenderer for EmptyRenderer {
-    fn render(&self, _: &mut UiBatch, _: &Ui, _: NodeId, _: &NodeGeometry, states: &WidgetStates) {}
+    fn render(&self, _: &mut UiBatch, _: &Ui, _: NodeId, _: &NodeGeometry, _: &WidgetStates) {}
 }
 
 pub struct SpriteRenderer {
@@ -456,7 +460,7 @@ impl TextLayout {
         let mut height = 0.0f32;
         let mut last_char = None;
 
-        for (index, c) in txt.chars().enumerate() {
+        for c in txt.chars() {
             if c != ' ' {
                 // TODO: Handle other whitespace
                 let font_char = font.char(c);
@@ -577,6 +581,7 @@ pub struct Color {
 }
 
 impl Color {
+    #[allow(dead_code)]
     pub const WHITE: Self = Self {
         r: 1.0,
         g: 1.0,
@@ -584,6 +589,7 @@ impl Color {
         a: 1.0,
     };
 
+    #[allow(dead_code)]
     pub const BLACK: Self = Self {
         r: 0.0,
         g: 0.0,

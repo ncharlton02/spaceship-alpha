@@ -204,17 +204,6 @@ impl<'a> ECS<'a> {
             .mark_for_removal(entity);
     }
 
-    pub fn raycast(
-        &self,
-        whitelist: Vec<usize>,
-        near: Vector3<f32>,
-        far: Vector3<f32>,
-    ) -> Option<Entity> {
-        self.world
-            .fetch::<RaycastWorld>()
-            .raycast(whitelist, near, far)
-    }
-
     pub fn get_resource_mut<T: 'static + Sync + Send>(&self) -> specs::shred::FetchMut<T> {
         self.world.write_resource::<T>()
     }

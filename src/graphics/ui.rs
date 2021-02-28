@@ -439,7 +439,7 @@ impl TextureAtlas {
     }
 
     pub fn load_font(&mut self, path: &'static str) -> FontMap {
-        use rusttype::{point, Point, Rect};
+        use rusttype::{point, Rect};
 
         let padding = 2.0;
         let bytes = super::read_file_bytes(path);
@@ -466,7 +466,7 @@ impl TextureAtlas {
 
         let texture_width = glyphs_width + (padding as u32 * 2);
         let texture_height = glyphs_height + (padding as u32 * 2);
-        let mut image = image::DynamicImage::new_rgba8(texture_width, texture_height).to_rgba();
+        let mut image = image::DynamicImage::new_rgba8(texture_width, texture_height).to_rgba8();
 
         for glyph in &glyphs {
             if let Some(bounding_box) = glyph.pixel_bounding_box() {
@@ -483,8 +483,6 @@ impl TextureAtlas {
         let texture = self
             .add_texture(path, image::DynamicImage::ImageRgba8(image))
             .pos;
-        let texture_width = texture_width as f32;
-        let texture_height = texture_height as f32;
 
         let font_glyphs = glyphs
             .into_iter()
@@ -515,6 +513,7 @@ impl TextureAtlas {
         FontMap { font, scale, map }
     }
 
+    #[allow(dead_code)]
     pub fn load_texture(&mut self, path: &str) -> TextureRegion2D {
         let bytes = super::read_file_bytes(path);
         let image = image::load_from_memory(&bytes).unwrap();
@@ -523,7 +522,7 @@ impl TextureAtlas {
     }
 
     pub fn add_texture(&mut self, name: &str, image: image::DynamicImage) -> TextureRegion2D {
-        self.packer.pack_own(name.to_owned(), image);
+        self.packer.pack_own(name.to_owned(), image).unwrap();
         let frame = self
             .packer
             .get_frame(&name)
@@ -604,7 +603,7 @@ fn copy_subtexture(
 ) -> image::DynamicImage {
     let width = p2.x - p1.x;
     let height = p2.y - p1.y;
-    let mut new = image::DynamicImage::new_rgba8(width, height).to_rgba();
+    let mut new = image::DynamicImage::new_rgba8(width, height).to_rgba8();
 
     for x in 0..width {
         for y in 0..height {

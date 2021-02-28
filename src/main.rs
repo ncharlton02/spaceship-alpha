@@ -1,11 +1,10 @@
 #[macro_use]
 extern crate lazy_static;
 
-use cgmath::{prelude::*, Point2, Vector3};
-use entity::{Collider, InputAction, InputManager, WindowSize, ECS};
+use cgmath::Point2;
+use entity::{InputManager, WindowSize, ECS};
 use graphics::{Camera, MeshManager, Renderer};
 use specs::prelude::*;
-use std::collections::HashSet;
 use ui::Ui;
 use winit::event;
 
@@ -25,7 +24,6 @@ mod ui;
 struct AppState {
     renderer: Renderer,
     ecs: entity::ECS<'static>,
-    left_click: Option<Point2<f32>>,
     ui: Ui,
 }
 
@@ -57,12 +55,7 @@ impl app::Application for AppState {
         let ui = Ui::new(ui_assets);
         queue.submit(None);
 
-        AppState {
-            renderer,
-            ecs,
-            ui,
-            left_click: None,
-        }
+        AppState { renderer, ecs, ui }
     }
 
     fn resize(
@@ -136,7 +129,6 @@ impl app::Application for AppState {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         self.renderer.render_world(
-            device,
             queue,
             texture,
             &mut encoder,
@@ -145,22 +137,13 @@ impl app::Application for AppState {
             &lines,
         );
 
-        self.renderer
-            .render_ui(device, queue, texture, &mut encoder);
+        self.renderer.render_ui(queue, texture, &mut encoder);
         queue.submit(Some(encoder.finish()));
     }
 }
 
 fn main() {
     app::run::<AppState>("Spaceship Alpha");
-}
-
-struct Keys(HashSet<event::VirtualKeyCode>);
-
-impl Keys {
-    fn is_key_down(&self, key: event::VirtualKeyCode) -> bool {
-        self.0.contains(&key)
-    }
 }
 
 #[allow(dead_code)]

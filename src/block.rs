@@ -3,7 +3,7 @@ use crate::entity::{
     ColliderShape, Hitbox, InputAction, InputManager, Line, RaycastWorld, Transform,
 };
 use crate::graphics::{self, Mesh, MeshId, MeshManager};
-use cgmath::{prelude::*, Point2, Vector3};
+use cgmath::{Point2, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
 
 pub type BlockId = usize;

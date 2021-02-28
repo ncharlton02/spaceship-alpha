@@ -1,6 +1,5 @@
 use std::env;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs::{self};
 use std::path::PathBuf;
 use std::process::Command;
 

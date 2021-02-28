@@ -1,5 +1,5 @@
 use super::*;
-use cgmath::{Point2, Point3};
+use cgmath::Point2;
 use std::cell::RefCell;
 use winit::event;
 
