@@ -233,7 +233,8 @@ impl Ui {
         if self.mouse_focus != new_focus {
             if let Some(prev_focus) = std::mem::replace(&mut self.mouse_focus, new_focus) {
                 if self.is_valid_id(prev_focus) {
-                    self.handlers[prev_focus.index()].on_mouse_focus_lost(prev_focus, &mut self.states);
+                    self.handlers[prev_focus.index()]
+                        .on_mouse_focus_lost(prev_focus, &mut self.states);
                 }
             }
         }
@@ -273,7 +274,7 @@ impl Ui {
     }
 
     fn is_valid_id(&self, id: NodeId) -> bool {
-        self.geometries.contains(id.arena_index()) 
+        self.geometries.contains(id.arena_index())
     }
 
     #[track_caller]

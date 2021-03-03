@@ -2,23 +2,33 @@ use super::{
     physics::{Collider, ColliderShape, Hitbox, RigidBody},
     EcsUtils, Model, Transform,
 };
-use crate::graphics::{MeshId, MeshManager};
+use crate::graphics::{Mesh, MeshId, MeshManager};
 use cgmath::{prelude::*, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
 
 /// Stores miscellaneous meshes (these are usually entities)
 pub struct ObjectMeshes {
-    pub asteroid: MeshId,
+    pub asteroids: Vec<MeshId>,
     pub mining_missle: MeshId,
 }
 
 impl ObjectMeshes {
     pub fn load(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> ObjectMeshes {
-        let mut load = |name: &str| mesh_manager.add(device, &crate::graphics::load_mesh(name));
+        let asteroid_base = crate::graphics::load_mesh("asteroid");
+
+        let mut iron_asteroid = asteroid_base.clone();
+        iron_asteroid.recolor(0.15, 0.0, 0.0);
+        let mut copper_asteroid = asteroid_base;
+        copper_asteroid.recolor(0.15, -0.08, -0.2);
+
+        let asteroids = vec![iron_asteroid, copper_asteroid]
+            .iter()
+            .map(|mesh| mesh_manager.add(device, &mesh))
+            .collect();
 
         Self {
-            asteroid: load("asteroid"),
-            mining_missle: load("mining_missle"),
+            asteroids,
+            mining_missle: mesh_manager.add(device, &crate::graphics::load_mesh("mining_missle")),
         }
     }
 }
@@ -36,7 +46,7 @@ pub fn setup_systems(builder: &mut DispatcherBuilder) {
 
 #[derive(Component)]
 #[storage(HashMapStorage)]
-pub struct Health(u32);
+pub struct Health(pub u32);
 
 impl Health {
     pub fn damage(&mut self, amount: u32) {
@@ -70,26 +80,6 @@ pub struct Asteroid;
 
 impl Asteroid {
     pub const HEALTH: u32 = 180;
-}
-
-pub fn create_asteroid(world: &mut World) {
-    let mesh = world.fetch::<ObjectMeshes>().asteroid;
-
-    world
-        .create_entity()
-        .with(Transform::from_position(-5.0, -5.0, 5.0))
-        .with(Model::new(mesh))
-        .with(RigidBody {
-            velocity: Vector3::new(1.0, 0.0, 0.0),
-        })
-        .with(Collider::new(
-            Hitbox::with_shape(ColliderShape::Sphere(0.8)),
-            Collider::ASTEROID,
-            vec![Collider::SHIP, Collider::MISSLE],
-        ))
-        .with(Asteroid)
-        .with(Health(Asteroid::HEALTH))
-        .build();
 }
 
 #[derive(Component)]

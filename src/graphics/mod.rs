@@ -12,6 +12,7 @@ mod line;
 mod obj;
 mod ui;
 
+#[derive(Clone)]
 pub struct Mesh {
     pub name: String,
     pub vertices: Vec<Vertex>,
@@ -72,6 +73,14 @@ impl Mesh {
             name: format!("RectangularPrism(x={}, y={}, z={})", x, y, z),
             indices,
             vertices,
+        }
+    }
+
+    pub fn recolor(&mut self, r: f32, g: f32, b: f32) {
+        for vertex in &mut self.vertices {
+            vertex.color.x += r;
+            vertex.color.y += g;
+            vertex.color.z += b;
         }
     }
 }

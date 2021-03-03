@@ -7,6 +7,7 @@ pub use physics::{Collider, ColliderShape, Hitbox, RaycastWorld, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
 use specs::{prelude::*, shred::Fetch, storage::MaskedStorage, Component};
 
+pub mod gameplay;
 pub mod input;
 pub mod objects;
 pub mod physics;
@@ -119,6 +120,7 @@ impl<'a> ECS<'a> {
         world.insert(RaycastWorld::new());
         world.insert(InputManager::new());
         objects::register_components(&mut world);
+        gameplay::register_components(&mut world);
         crate::block::register_components(&mut world);
 
         let model_update_system = {
@@ -138,6 +140,7 @@ impl<'a> ECS<'a> {
         dispatcher_builder.add_barrier();
         crate::block::setup_systems(&mut dispatcher_builder);
         objects::setup_systems(&mut dispatcher_builder);
+        gameplay::setup_systems(&mut dispatcher_builder);
         dispatcher_builder.add_barrier();
         let dispatcher = dispatcher_builder
             .with(physics::PhysicsSystem, "physics_system", &[])
@@ -150,7 +153,7 @@ impl<'a> ECS<'a> {
             .build();
 
         ship::create_ship(&mut world);
-        objects::create_asteroid(&mut world);
+        gameplay::init_world(&mut world);
 
         ECS { world, dispatcher }
     }

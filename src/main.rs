@@ -38,9 +38,9 @@ impl app::Application for AppState {
         let blocks = block::load_blocks(device, &mut mesh_manager);
         let floors = floor::load_floors(device, &mut mesh_manager);
         let camera = Camera {
-            position: (-12.0, 0.0, 12.0).into(),
+            position: (-18.0, 0.0, 18.0).into(),
             yaw: 0.0,
-            pitch: -1.0,
+            pitch: -1.3,
             aspect: swapchain.width as f32 / swapchain.height as f32,
             fov: 45.0,
             near: 0.1,
