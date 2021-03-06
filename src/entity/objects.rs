@@ -1,14 +1,16 @@
 use super::{
     physics::{Collider, ColliderShape, Hitbox, RigidBody},
-    EcsUtils, Model, Transform,
+    Model, ToBeRemoved, Transform,
 };
-use crate::graphics::{Mesh, MeshId, MeshManager};
+use crate::graphics::{MeshId, MeshManager};
+use crate::item::{GameItem, Inventory};
 use cgmath::{prelude::*, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
+use std::collections::HashMap;
 
 /// Stores miscellaneous meshes (these are usually entities)
 pub struct ObjectMeshes {
-    pub asteroids: Vec<MeshId>,
+    pub asteroids: HashMap<GameItem, MeshId>,
     pub mining_missle: MeshId,
 }
 
@@ -16,14 +18,13 @@ impl ObjectMeshes {
     pub fn load(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> ObjectMeshes {
         let asteroid_base = crate::graphics::load_mesh("asteroid");
 
-        let mut iron_asteroid = asteroid_base.clone();
-        iron_asteroid.recolor(0.15, 0.0, 0.0);
-        let mut copper_asteroid = asteroid_base;
-        copper_asteroid.recolor(0.15, -0.08, -0.2);
-
-        let asteroids = vec![iron_asteroid, copper_asteroid]
+        let asteroids: HashMap<GameItem, MeshId> = GameItem::asteroid_info()
             .iter()
-            .map(|mesh| mesh_manager.add(device, &mesh))
+            .map(|(item, color)| {
+                let mut mesh = asteroid_base.clone();
+                mesh.recolor(*color);
+                (*item, mesh_manager.add(device, &mesh))
+            })
             .collect();
 
         Self {
@@ -61,14 +62,18 @@ impl Health {
 pub struct NoMoreHealthSystem;
 
 impl<'a> System<'a> for NoMoreHealthSystem {
-    type SystemData = (Entities<'a>, Write<'a, EcsUtils>, ReadStorage<'a, Health>);
+    type SystemData = (
+        Entities<'a>,
+        Write<'a, ToBeRemoved>,
+        ReadStorage<'a, Health>,
+    );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, mut ecs_utils, healths) = data;
+        let (entities, mut to_be_removed, healths) = data;
 
         for (entity, health) in (&entities, &healths).join() {
             if health.health() == 0 {
-                ecs_utils.mark_for_removal(entity);
+                to_be_removed.add(entity);
             }
         }
     }
@@ -76,10 +81,32 @@ impl<'a> System<'a> for NoMoreHealthSystem {
 
 #[derive(Component)]
 #[storage(HashMapStorage)]
-pub struct Asteroid;
+pub struct Asteroid(pub GameItem);
 
 impl Asteroid {
     pub const HEALTH: u32 = 180;
+}
+
+pub struct AsteroidMinedSystem;
+
+impl<'a> System<'a> for AsteroidMinedSystem {
+    type SystemData = (
+        Read<'a, ToBeRemoved>,
+        WriteExpect<'a, Inventory>,
+        ReadStorage<'a, Asteroid>,
+        ReadStorage<'a, Health>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (to_be_removed, mut inventory, asteroids, healths) = data;
+
+        for (_, asteroid, health) in (to_be_removed.bitset(), &asteroids, &healths).join() {
+            if health.health() == 0 {
+                // Need to make sure it was actually mined (and not just removed)
+                inventory.change_amount(asteroid.0, 5);
+            }
+        }
+    }
 }
 
 #[derive(Component)]
@@ -118,18 +145,18 @@ struct MiningMissleSystem;
 impl<'a> System<'a> for MiningMissleSystem {
     type SystemData = (
         Entities<'a>,
-        Write<'a, EcsUtils>,
+        Write<'a, ToBeRemoved>,
         ReadStorage<'a, MiningMissle>,
         ReadStorage<'a, Transform>,
         WriteStorage<'a, RigidBody>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, mut ecs_utils, missles, transforms, mut rigid_bodies) = data;
+        let (entities, mut to_be_removed, missles, transforms, mut rigid_bodies) = data;
 
         for (entity, missle) in (&entities, &missles).join() {
             if !entities.is_alive(missle.target) {
-                ecs_utils.mark_for_removal(entity);
+                to_be_removed.add(entity);
                 continue;
             }
 

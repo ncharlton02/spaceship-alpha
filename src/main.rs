@@ -5,7 +5,7 @@ use cgmath::Point2;
 use entity::{InputManager, WindowSize, ECS};
 use graphics::{Camera, MeshManager, Renderer};
 use specs::prelude::*;
-use ui::Ui;
+use ui::{Ui, UiAssets};
 use winit::event;
 
 pub const WIREFRAME_MODE: bool = false;
@@ -19,6 +19,7 @@ mod block;
 mod entity;
 mod floor;
 mod graphics;
+mod item;
 mod ui;
 
 struct AppState {
@@ -34,7 +35,7 @@ impl app::Application for AppState {
         queue: &wgpu::Queue,
     ) -> Self {
         let mut mesh_manager = MeshManager::new();
-        let (renderer, ui_assets) = Renderer::new(device, queue, &swapchain);
+        let mut renderer = Renderer::new(device, &swapchain);
         let blocks = block::load_blocks(device, &mut mesh_manager);
         let floors = floor::load_floors(device, &mut mesh_manager);
         let camera = Camera {
@@ -52,6 +53,7 @@ impl app::Application for AppState {
         };
 
         let ecs = ECS::new(device, mesh_manager, blocks, floors, camera, window_size);
+        let ui_assets = UiAssets::new(device, queue, &mut renderer.ui_renderer.batch.atlas);
         let ui = Ui::new(ui_assets);
         queue.submit(None);
 

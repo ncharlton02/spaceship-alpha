@@ -35,21 +35,10 @@ pub struct UiRenderer {
     pub batch: UiBatch,
 }
 
-pub struct UiAssets {
-    pub button: NinePatch,
-    pub button_pressed: NinePatch,
-    pub medium_font: FontMap,
-    pub pane: NinePatch,
-}
-
 impl UiRenderer {
     const MAX_SPRITES: u64 = 1024;
 
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        swapchain: &wgpu::SwapChainDescriptor,
-    ) -> (Self, UiAssets) {
+    pub fn new(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) -> Self {
         let camera = UiCamera::new(device, swapchain);
 
         let vertex_bytes = super::read_file_bytes("assets/shaders/ui.vert.spv");
@@ -66,15 +55,7 @@ impl UiRenderer {
             flags: wgpu::ShaderFlags::VALIDATION,
         });
 
-        // TODO: Move asset loading to ui code
-        let mut texture_atlas = TextureAtlas::new(device);
-        let assets = UiAssets {
-            button: texture_atlas.load_ninepatch("assets/ui/widgets/button.9.png"),
-            button_pressed: texture_atlas.load_ninepatch("assets/ui/widgets/button_pressed.9.png"),
-            medium_font: texture_atlas.load_font("assets/ui/fonts/montserrat-medium.ttf"),
-            pane: texture_atlas.load_ninepatch("assets/ui/widgets/pane.9.png"),
-        };
-        texture_atlas.update_gpu_texture(device, queue);
+        let texture_atlas = TextureAtlas::new(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("UI Pipeline Layout"),
             bind_group_layouts: &[&camera.bind_group_layout, &texture_atlas.bg_layout],
@@ -132,14 +113,11 @@ impl UiRenderer {
         });
         let batch = UiBatch::new(texture_atlas);
 
-        (
-            Self {
-                pipeline,
-                camera,
-                batch,
-            },
-            assets,
-        )
+        Self {
+            pipeline,
+            camera,
+            batch,
+        }
     }
 }
 

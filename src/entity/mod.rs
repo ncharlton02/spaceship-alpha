@@ -85,9 +85,31 @@ impl<'a> System<'a> for ModelUpdateSystem {
     }
 }
 
+struct RemoveModelSystem;
+
+impl<'a> System<'a> for RemoveModelSystem {
+    type SystemData = (
+        Read<'a, ToBeRemoved>,
+        WriteExpect<'a, MeshManager>,
+        WriteStorage<'a, Model>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (to_be_removed, mut mesh_manager, mut models) = data;
+
+        for (model, _) in (&mut models, to_be_removed.bitset()).join() {
+            if let Some(model_id) = model.model_id {
+                mesh_manager.remove_model(model.mesh_id, model_id);
+                model.model_id = None;
+            }
+        }
+    }
+}
+
 pub struct ECS<'a> {
     pub world: World,
-    pub dispatcher: Dispatcher<'a, 'a>,
+    dispatcher: Dispatcher<'a, 'a>,
+    death_dispatcher: Dispatcher<'a, 'a>,
 }
 
 impl<'a> ECS<'a> {
@@ -101,6 +123,8 @@ impl<'a> ECS<'a> {
     ) -> Self {
         let meshes = ObjectMeshes::load(device, &mut mesh_manager);
         let hitbox_meshes = physics::HitboxMeshes::load(device, &mut mesh_manager);
+        let inventory = crate::item::Inventory::new();
+
         let mut world = World::new();
         world.register::<Model>();
         world.register::<Ship>();
@@ -109,7 +133,7 @@ impl<'a> ECS<'a> {
         world.register::<RigidBody>();
         world.register::<Collider>();
         world.register::<Line>();
-        world.insert(EcsUtils::default());
+        world.insert(ToBeRemoved::default());
         world.insert(meshes);
         world.insert(hitbox_meshes);
         world.insert(mesh_manager);
@@ -117,6 +141,7 @@ impl<'a> ECS<'a> {
         world.insert(floors);
         world.insert(camera);
         world.insert(window_size);
+        world.insert(inventory);
         world.insert(RaycastWorld::new());
         world.insert(InputManager::new());
         objects::register_components(&mut world);
@@ -152,10 +177,20 @@ impl<'a> ECS<'a> {
             .with(model_update_system, "update_models", &["raycast_system"])
             .build();
 
+        let death_dispatcher = DispatcherBuilder::new()
+            .with(objects::AsteroidMinedSystem, "", &[])
+            .with(RemoveModelSystem, "", &[])
+            .with(physics::RemoveRaycastColliderSystem, "", &[])
+            .build();
+
         ship::create_ship(&mut world);
         gameplay::init_world(&mut world);
 
-        ECS { world, dispatcher }
+        ECS {
+            world,
+            dispatcher,
+            death_dispatcher,
+        }
     }
 
     pub fn update(&mut self) {
@@ -164,47 +199,18 @@ impl<'a> ECS<'a> {
     }
 
     pub fn maintain(&mut self) {
+        self.death_dispatcher.dispatch(&self.world);
         {
-            // TODO: Convert this to a system that is executed at the end of an update (pre-physics / rendering)
-            let mut ecs_utils = self.world.fetch_mut::<EcsUtils>();
-            let mut mesh_manager = self.world.fetch_mut::<MeshManager>();
-            let mut raycast_world = self.world.fetch_mut::<RaycastWorld>();
-            let hitbox_meshes = self.world.fetch::<physics::HitboxMeshes>();
-
-            for entity in &ecs_utils.to_be_removed {
-                if let Some(mut model) = self
-                    .world
-                    .write_component::<Model>()
-                    .get_mut(*entity)
-                    .filter(|model| model.model_id.is_some())
-                {
-                    mesh_manager.remove_model(model.mesh_id, model.model_id.unwrap());
-                    model.model_id = None;
-                }
-
-                if let Some(mut collider) =
-                    self.world.write_component::<Collider>().get_mut(*entity)
-                {
-                    raycast_world.remove(&mut collider, &mut mesh_manager, &hitbox_meshes);
-                }
-
+            let mut to_be_removed = self.world.fetch_mut::<ToBeRemoved>();
+            for entity in to_be_removed.as_slice() {
                 self.world
                     .entities()
                     .delete(*entity)
                     .expect("Unable to delete entity marked for removal");
             }
-            ecs_utils.to_be_removed.clear();
+            to_be_removed.clear();
         }
-
         self.world.maintain();
-    }
-
-    #[allow(dead_code)]
-    pub fn mark_for_removal(&mut self, entity: Entity) {
-        self.world
-            .get_mut::<EcsUtils>()
-            .unwrap()
-            .mark_for_removal(entity);
     }
 
     pub fn get_resource_mut<T: 'static + Sync + Send>(&self) -> specs::shred::FetchMut<T> {
@@ -217,19 +223,33 @@ impl<'a> ECS<'a> {
 }
 
 #[derive(Default)]
-pub struct EcsUtils {
-    to_be_removed: Vec<Entity>,
+pub struct ToBeRemoved {
+    vec: Vec<Entity>,
+    bitset: BitSet,
 }
 
-impl EcsUtils {
+impl ToBeRemoved {
     /// Marks an entity to be removed at the end of the update.
-    /// This should be used over world.delete() because this will delete
-    /// the model from the renderer
-    #[allow(dead_code)]
-    pub fn mark_for_removal(&mut self, entity: Entity) {
-        if !self.to_be_removed.contains(&entity) {
-            self.to_be_removed.push(entity);
+    /// This should be used over world.delete() because this will perform
+    /// cleanup in the physics / rendering system
+    pub fn add(&mut self, entity: Entity) {
+        if !self.vec.contains(&entity) {
+            self.vec.push(entity);
+            self.bitset.add(entity.id());
         }
+    }
+
+    pub fn bitset(&self) -> &BitSet {
+        &self.bitset
+    }
+
+    pub fn as_slice(&self) -> &[Entity] {
+        &self.vec
+    }
+
+    pub fn clear(&mut self) {
+        self.vec.clear();
+        self.bitset.clear();
     }
 }
 
@@ -284,7 +304,7 @@ pub struct WindowSize {
 }
 
 impl WindowSize {
-    fn as_point(&self) -> Point2<f32> {
+    pub fn as_point(&self) -> Point2<f32> {
         Point2::new(self.width, self.height)
     }
 }

@@ -1,4 +1,4 @@
-use super::{EcsUtils, SimpleStorage, Transform};
+use super::{SimpleStorage, ToBeRemoved, Transform};
 use crate::graphics::{Mesh, MeshId, MeshManager, ModelId, Vertex};
 use cgmath::{prelude::*, Matrix4, Point3, Vector3};
 use nalgebra::{
@@ -26,7 +26,7 @@ pub struct PhysicsSystem;
 impl<'a> System<'a> for PhysicsSystem {
     type SystemData = (
         Entities<'a>,
-        Write<'a, EcsUtils>,
+        Write<'a, ToBeRemoved>,
         WriteStorage<'a, Transform>,
         ReadStorage<'a, Collider>,
         ReadStorage<'a, RigidBody>,
@@ -38,7 +38,7 @@ impl<'a> System<'a> for PhysicsSystem {
     fn run(&mut self, data: Self::SystemData) {
         let (
             entities,
-            mut ecs_utils,
+            mut to_be_removed,
             mut transforms,
             colliders,
             bodies,
@@ -87,17 +87,17 @@ impl<'a> System<'a> for PhysicsSystem {
 
                     if has_component(entity1, entity2, &blocks) {
                         if asteroids.contains(entity1) {
-                            ecs_utils.mark_for_removal(entity1);
+                            to_be_removed.add(entity1);
                         } else if asteroids.contains(entity2) {
-                            ecs_utils.mark_for_removal(entity2);
+                            to_be_removed.add(entity2);
                         }
                     }
 
                     if has_component(entity1, entity2, &missles)
                         && has_component(entity1, entity2, &asteroids)
                     {
-                        ecs_utils.mark_for_removal(entity1);
-                        ecs_utils.mark_for_removal(entity2);
+                        to_be_removed.add(entity1);
+                        to_be_removed.add(entity2);
                     }
                 }
                 ContactEvent::Stopped(_, _) => {}
@@ -218,22 +218,6 @@ impl RaycastWorld {
         Self(CollisionWorld::new(0.02))
     }
 
-    pub fn remove(
-        &mut self,
-        collider: &mut Collider,
-        mesh_manager: &mut MeshManager,
-        meshes: &HitboxMeshes,
-    ) {
-        if let Some(id) = collider.raycast_id {
-            self.0.remove(&[id]);
-            collider.raycast_id = None;
-        }
-
-        if let Some(id) = collider.model_id {
-            mesh_manager.remove_model(collider.hitbox.to_hitbox_mesh(meshes), id);
-        }
-    }
-
     /// Note: If the whitelist is empty,
     /// then the whitelist is set to ALL groups.
     pub fn raycast(
@@ -308,6 +292,35 @@ impl<'a> System<'a> for RaycastSystem {
             }
         }
         world.update();
+    }
+}
+
+pub struct RemoveRaycastColliderSystem;
+
+impl<'a> System<'a> for RemoveRaycastColliderSystem {
+    type SystemData = (
+        Read<'a, ToBeRemoved>,
+        WriteExpect<'a, RaycastWorld>,
+        WriteExpect<'a, MeshManager>,
+        ReadExpect<'a, HitboxMeshes>,
+        WriteStorage<'a, Collider>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (to_be_removed, mut raycast_world, mut mesh_manager, hitbox_meshes, mut colliders) =
+            data;
+
+        for (collider, _) in (&mut colliders, to_be_removed.bitset()).join() {
+            if let Some(id) = collider.raycast_id {
+                raycast_world.0.remove(&[id]);
+                collider.raycast_id = None;
+            }
+
+            if let Some(id) = collider.model_id {
+                mesh_manager.remove_model(collider.hitbox.to_hitbox_mesh(&hitbox_meshes), id);
+                collider.model_id = None;
+            }
+        }
     }
 }
 

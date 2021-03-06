@@ -1,16 +1,17 @@
 use cgmath::{Point2, Vector4};
 
 use crate::entity::ECS;
-use crate::graphics::{FontGlyph, FontMap, NinePatch, TextureRegion2D, UiAssets, UiBatch};
+use crate::graphics::{FontGlyph, FontMap, NinePatch, TextureAtlas, TextureRegion2D, UiBatch};
+use crate::item::{self, GameItem};
 use generational_arena::Arena;
 use std::any::Any;
+use std::collections::HashMap;
 use std::rc::Rc;
 use winit::event;
 
-mod button;
-mod stack;
-
 mod in_game;
+mod layout;
+mod widgets;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(generational_arena::Index);
@@ -97,6 +98,7 @@ pub struct Ui {
     children: WidgetChildren,
     handlers: WidgetHandlers,
     renderers: Vec<Box<dyn NodeRenderer>>,
+    updaters: Vec<Option<EventHandler>>,
     states: WidgetStates,
     assets: UiAssets,
     mouse_focus: Option<NodeId>,
@@ -112,6 +114,7 @@ impl Ui {
             children: Vec::new(),
             renderers: Vec::new(),
             handlers: Vec::new(),
+            updaters: Vec::new(),
             states: WidgetStates { states: Vec::new() },
             mouse_focus: None,
             event_queue: EventQueue(Vec::new()),
@@ -138,6 +141,7 @@ impl Ui {
         insert_or_replace(&mut self.children, id, Vec::new());
         insert_or_replace(&mut self.renderers, id, renderer);
         insert_or_replace(&mut self.handlers, id, handler);
+        insert_or_replace(&mut self.updaters, id, None);
         insert_or_replace(&mut self.states.states, id, state);
 
         if let Some(parent) = parent {
@@ -163,6 +167,7 @@ impl Ui {
         self.parents[id.index()] = None;
         self.renderers[id.index()] = Box::new(EmptyRenderer);
         self.handlers[id.index()] = Box::new(EmptyNodeHandler);
+        self.updaters[id.index()] = None;
         self.states.states[id.index()] = None;
 
         std::mem::replace(&mut self.children[id.index()], Vec::with_capacity(0))
@@ -243,8 +248,13 @@ impl Ui {
     }
 
     pub fn update(&mut self, ecs: &mut ECS) {
+        let window_size = ecs.get_resource::<crate::entity::WindowSize>().as_point();
         let parentless = self.find_parentless_nodes();
-        let layout_manager = LayoutManager(&self.children, &self.handlers);
+        let layout_manager = LayoutManager {
+            window_size,
+            children: &self.children,
+            handlers: &self.handlers,
+        };
 
         // TODO: Do not layout every frame
         for id in parentless {
@@ -258,11 +268,22 @@ impl Ui {
             );
         }
 
-        // Temporarily replace event queue with a zero sized Vec
         let mut events = std::mem::replace(&mut self.event_queue.0, Vec::with_capacity(0));
-        events.iter().for_each(|event| (event)(self, ecs));
+        let updaters = std::mem::replace(&mut self.updaters, Vec::with_capacity(0));
+        updaters
+            .iter()
+            .filter_map(|x| x.as_ref())
+            .chain(events.iter())
+            .for_each(|event| (event)(self, ecs));
         events.clear();
         self.event_queue.0 = events;
+        self.updaters = updaters;
+    }
+
+    fn set_on_update(&mut self, node_id: NodeId, on_update: EventHandler) {
+        self.check_id(node_id, "Invalid node.");
+
+        self.updaters[node_id.index()] = Some(on_update);
     }
 
     fn find_parentless_nodes(&self) -> Vec<NodeId> {
@@ -293,7 +314,29 @@ pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
     }
 }
 
-#[allow(dead_code)]
+pub struct UiAssets {
+    pub button: NinePatch,
+    pub button_pressed: NinePatch,
+    pub medium_font: FontMap,
+    pub pane: NinePatch,
+    pub item_icons: HashMap<GameItem, TextureRegion2D>,
+}
+
+impl UiAssets {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, atlas: &mut TextureAtlas) -> Self {
+        let assets = UiAssets {
+            item_icons: item::load_item_icons(atlas),
+            button: atlas.load_ninepatch("assets/ui/widgets/button.9.png"),
+            button_pressed: atlas.load_ninepatch("assets/ui/widgets/button_pressed.9.png"),
+            medium_font: atlas.load_font("assets/ui/fonts/montserrat-medium.ttf"),
+            pane: atlas.load_ninepatch("assets/ui/widgets/pane.9.png"),
+        };
+        atlas.update_gpu_texture(device, queue);
+
+        assets
+    }
+}
+
 pub fn new_sprite_renderer(texture: TextureRegion2D) -> Box<SpriteRenderer> {
     Box::new(SpriteRenderer {
         texture,
@@ -518,7 +561,11 @@ impl NodeRenderer for TextLayout {
     }
 }
 
-pub struct LayoutManager<'a>(&'a WidgetChildren, &'a WidgetHandlers);
+pub struct LayoutManager<'a> {
+    pub window_size: Point2<f32>,
+    children: &'a WidgetChildren,
+    handlers: &'a WidgetHandlers,
+}
 
 impl LayoutManager<'_> {
     pub fn layout_all(
@@ -529,10 +576,10 @@ impl LayoutManager<'_> {
         states: &mut WidgetStates,
     ) {
         for node in nodes {
-            self.1[node.index()].layout(
+            self.handlers[node.index()].layout(
                 &self,
                 *node,
-                &self.0[node.index()],
+                &self.children[node.index()],
                 geometries,
                 layouts,
                 states,

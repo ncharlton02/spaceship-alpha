@@ -76,11 +76,11 @@ impl Mesh {
         }
     }
 
-    pub fn recolor(&mut self, r: f32, g: f32, b: f32) {
+    pub fn recolor(&mut self, c: Point3<f32>) {
         for vertex in &mut self.vertices {
-            vertex.color.x += r;
-            vertex.color.y += g;
-            vertex.color.z += b;
+            vertex.color.x += c.x;
+            vertex.color.y += c.y;
+            vertex.color.z += c.z;
         }
     }
 }
@@ -250,11 +250,7 @@ pub struct Renderer {
 impl Renderer {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn new<'a>(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        swapchain: &wgpu::SwapChainDescriptor,
-    ) -> (Renderer, UiAssets) {
+    pub fn new<'a>(device: &wgpu::Device, swapchain: &wgpu::SwapChainDescriptor) -> Renderer {
         let camera_buffer_size = 16 * mem::size_of::<f32>() as u64;
         let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera Buffer"),
@@ -368,20 +364,17 @@ impl Renderer {
         });
 
         let line_renderer = LineRenderer::new(device, &camera_bgl, swapchain);
-        let (ui_renderer, ui_assets) = UiRenderer::new(device, queue, swapchain);
+        let ui_renderer = UiRenderer::new(device, swapchain);
 
-        (
-            Renderer {
-                pipeline,
-                camera_bg,
-                camera_buffer,
-                depth_texture,
-                msaa_texture,
-                line_renderer,
-                ui_renderer,
-            },
-            ui_assets,
-        )
+        Renderer {
+            pipeline,
+            camera_bg,
+            camera_buffer,
+            depth_texture,
+            msaa_texture,
+            line_renderer,
+            ui_renderer,
+        }
     }
 
     pub fn render_world(
