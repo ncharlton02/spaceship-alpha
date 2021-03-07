@@ -1,6 +1,6 @@
 use crate::graphics::{Camera, MeshId, MeshManager, ModelId};
 use crate::{block::Blocks, floor::Floors};
-use cgmath::{prelude::*, Matrix4, Point2, Point3, Quaternion, Vector3};
+use cgmath::{prelude::*, Matrix4, Point2, Quaternion, Vector3};
 pub use input::{InputAction, InputManager};
 pub use objects::ObjectMeshes;
 pub use physics::{Collider, ColliderShape, Hitbox, RaycastWorld, RigidBody};
@@ -258,7 +258,7 @@ impl ToBeRemoved {
 pub struct Transform {
     pub position: Vector3<f32>,
     pub rotation: Quaternion<f32>,
-    pub scale: Point3<f32>,
+    pub scale: Vector3<f32>,
 }
 
 impl Component for Transform {
@@ -269,7 +269,7 @@ impl Transform {
     pub fn from_position(x: f32, y: f32, z: f32) -> Self {
         Self {
             position: Vector3::new(x, y, z),
-            scale: Point3::new(1.0, 1.0, 1.0),
+            scale: Vector3::new(1.0, 1.0, 1.0),
             rotation: Quaternion::from_angle_z(cgmath::Rad(0.0)),
         }
     }

@@ -422,6 +422,8 @@ impl TextureAtlas {
         let padding = 2.0;
         let bytes = super::read_file_bytes(path);
         let font = Font::try_from_vec(bytes).unwrap();
+        //TODO: Currently this cannot change because
+        //the size for space is hard-coded into TextLayoutRenderer
         let size = 32.0;
         let scale = Scale::uniform(size);
         let v_metrics = font.v_metrics(scale);

@@ -154,17 +154,21 @@ impl Hitbox {
     }
 
     pub fn to_hitbox_model(&self, transform: &Transform) -> Matrix4<f32> {
-        let mut transform = transform.clone();
-        transform.position += self.offset;
+        let mut hb_transform = transform.clone();
+        hb_transform.position += self.offset;
 
         match self.shape {
-            ColliderShape::Cuboid(size) => transform.scale = Point3::from_vec(size),
+            ColliderShape::Cuboid(size) => hb_transform.scale = size,
             ColliderShape::Sphere(radius) => {
-                transform.scale = Point3::new(radius, radius, radius);
+                hb_transform.scale = Vector3::new(radius, radius, radius);
             }
         }
 
-        transform.as_matrix()
+        hb_transform.scale.x *= transform.scale.x;
+        hb_transform.scale.y *= transform.scale.z;
+        hb_transform.scale.z *= transform.scale.y;
+
+        hb_transform.as_matrix()
     }
 
     pub fn to_hitbox_mesh(&self, meshes: &HitboxMeshes) -> MeshId {

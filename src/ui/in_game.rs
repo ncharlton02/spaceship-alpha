@@ -6,8 +6,8 @@ use crate::item::{GameItem, Inventory};
 // all of the elements of a scene can be deleted at
 // once
 pub fn create_in_game_ui(ui: &mut Ui) {
-    let top_anchor = layout::WindowAnchor::TopLeft.new(ui);
-    let inventory = layout::create_vbox(ui, Some(top_anchor), false);
+    let top_left_anchor = layout::WindowAnchor::TopLeft.new(ui);
+    let inventory = layout::create_vbox(ui, Some(top_left_anchor), false);
 
     for item in GameItem::iter() {
         let hbox = layout::create_hbox(ui, Some(inventory), false);
@@ -31,6 +31,22 @@ pub fn create_in_game_ui(ui: &mut Ui) {
             }),
         );
     }
+
+    let top_anchor = layout::WindowAnchor::TopCenter.new(ui);
+    let action_label = Label::create(ui, Some(top_anchor), "Current Action: None");
+    ui.set_on_update(
+        action_label,
+        Rc::new(move |ui, ecs| {
+            let input_action = &ecs
+                .get_resource::<crate::entity::input::InputManager>()
+                .action;
+            Label::update_text(
+                ui,
+                action_label,
+                &format!("Current Action: {:?}", input_action),
+            );
+        }),
+    );
 
     let button_stack = layout::create_vbox(ui, None, true);
     Button::create(

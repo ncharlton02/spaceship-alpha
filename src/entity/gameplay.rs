@@ -75,7 +75,7 @@ impl<'a> System<'a> for AsteroidFieldSystem {
                 let pos_y: f32 =
                     rng.gen_range(-5.0..5.0) + if rng.gen::<bool>() { 14.0 } else { -10.0 };
                 let mut transform =
-                    Transform::from_position(-field.x_range, pos_y, rng.gen_range(-5.0..5.0));
+                    Transform::from_position(-field.x_range, pos_y, rng.gen_range(5.0..10.0));
                 transform.set_rotation_z(rng.gen_range(0.0..crate::PI * 2.0));
                 // TODO: Hide Spawning from Camera
                 // TODO: Never Spawn collision with ship!
@@ -84,10 +84,10 @@ impl<'a> System<'a> for AsteroidFieldSystem {
                     .with(transform)
                     .with(Model::new(*meshes.asteroids.get(item).unwrap()))
                     .with(RigidBody {
-                        velocity: Vector3::new(1.3, 0.0, 0.0),
+                        velocity: Vector3::new(Asteroid::VELOCITY, 0.0, 0.0),
                     })
                     .with(Collider::new(
-                        Hitbox::with_shape(ColliderShape::Sphere(0.8)),
+                        Hitbox::with_shape(ColliderShape::Sphere(Asteroid::COLLIDER_RADIUS)),
                         Collider::ASTEROID,
                         vec![Collider::SHIP, Collider::MISSLE],
                     ))

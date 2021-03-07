@@ -517,7 +517,7 @@ impl TextLayout {
                 width += font_char.advance_width;
                 height = height.max(font_char.height);
             } else {
-                width += 20.0; //TODO - add spacing to FontMap
+                width += 15.0; //TODO - add spacing to FontMap
             }
 
             last_char = Some(c);

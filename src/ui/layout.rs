@@ -123,7 +123,7 @@ pub fn create_hbox(ui: &mut Ui, parent: Option<NodeId>, draw_background: bool) -
 pub enum WindowAnchor {
     // TODO: Add the rest of the variants
     TopLeft,
-    BottomLeft,
+    TopCenter,
 }
 
 impl WindowAnchor {
@@ -161,9 +161,9 @@ impl NodeHandler for WindowAnchor {
         };
 
         match self {
-            Self::BottomLeft => layout(|geometry, _| {
-                geometry.pos.x = 0.0;
-                geometry.pos.y = 0.0;
+            Self::TopCenter => layout(|geometry, window_size| {
+                geometry.pos.x = (window_size.x / 2.0) - (geometry.size.x / 2.0);
+                geometry.pos.y = window_size.y - geometry.size.y;
             }),
             Self::TopLeft => layout(|geometry, window_size| {
                 geometry.pos.x = 0.0;

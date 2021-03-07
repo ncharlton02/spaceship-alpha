@@ -43,6 +43,7 @@ pub fn register_components(world: &mut World) {
 pub fn setup_systems(builder: &mut DispatcherBuilder) {
     builder.add(MiningMissleSystem, "", &[]);
     builder.add(NoMoreHealthSystem, "", &[]);
+    builder.add(AsteroidShrinkSystem, "", &[]);
 }
 
 #[derive(Component)]
@@ -85,6 +86,27 @@ pub struct Asteroid(pub GameItem);
 
 impl Asteroid {
     pub const HEALTH: u32 = 180;
+    pub const COLLIDER_RADIUS: f32 = 0.8;
+    pub const VELOCITY: f32 = 1.3;
+}
+
+pub struct AsteroidShrinkSystem;
+
+impl<'a> System<'a> for AsteroidShrinkSystem {
+    type SystemData = (
+        WriteStorage<'a, Transform>,
+        ReadStorage<'a, Asteroid>,
+        ReadStorage<'a, Health>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (mut transforms, asteroids, healths) = data;
+
+        for (transform, _, health) in (&mut transforms, &asteroids, &healths).join() {
+            let scale = 0.5 + (health.health() as f32 / Asteroid::HEALTH as f32) / 2.0;
+            transform.scale = Vector3::new(scale, scale, scale);
+        }
+    }
 }
 
 pub struct AsteroidMinedSystem;
