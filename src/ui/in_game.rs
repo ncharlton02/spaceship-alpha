@@ -70,9 +70,7 @@ pub fn create_in_game_ui(ui: &mut Ui) {
     Button::create(
         ui,
         Some(button_stack),
-        "Delete UI",
-        Rc::new(move |ui, _| {
-            ui.remove_node(button_stack);
-        }),
+        "Build",
+        Rc::new(|_, ecs| ecs.get_resource_mut::<InputManager>().action = InputAction::Build),
     );
 }

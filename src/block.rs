@@ -9,7 +9,6 @@ use specs::{prelude::*, world::LazyBuilder, Component};
 pub type BlockId = usize;
 pub type OnBlockSetup = fn(LazyBuilder) -> LazyBuilder;
 
-// TODO: Currently size is used for collision and grid spaces (but they should seperate)
 pub struct Block {
     pub id: BlockId,
     pub type_name: &'static str,

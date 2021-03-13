@@ -6,7 +6,7 @@ use specs::{prelude::*, world::EntitiesRes, Component};
 use std::collections::HashMap;
 
 #[derive(Component)]
-#[storage(VecStorage)]
+#[storage(HashMapStorage)]
 pub struct Ship {
     tiles: HashMap<Point2<i16>, Tile>,
 }
@@ -18,11 +18,12 @@ pub struct Tile {
     floor: Option<Entity>,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 #[storage(VecStorage)]
 pub struct BlockEntity {
-    block_id: BlockId,
-    root: Point2<i16>,
+    pub ship: Entity,
+    pub block_id: BlockId,
+    pub root: Point2<i16>,
 }
 
 pub enum BuildAction {
@@ -32,11 +33,11 @@ pub enum BuildAction {
     RemoveFloor(Point2<i16>),
 }
 
-pub fn execute_build_actions(world: &mut World, ship: Entity, actions: &[BuildAction]) {
+pub fn execute_build_actions(world: &mut World, ship_entity: Entity, actions: &[BuildAction]) {
     let lazy_update = world.fetch::<LazyUpdate>();
     let entities = world.fetch::<EntitiesRes>();
     let mut ships = world.write_component::<Ship>();
-    let ship = ships.get_mut(ship).unwrap();
+    let ship = ships.get_mut(ship_entity).unwrap();
     let blocks = world.fetch::<Blocks>();
     let block_entities = world.read_component::<BlockEntity>();
 
@@ -96,6 +97,7 @@ pub fn execute_build_actions(world: &mut World, ship: Entity, actions: &[BuildAc
                     .create_entity(&entities)
                     .with(Model::new(block.mesh_id))
                     .with(BlockEntity {
+                        ship: ship_entity,
                         block_id: *block_id,
                         root: *pos,
                     })

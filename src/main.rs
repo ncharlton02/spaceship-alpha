@@ -95,12 +95,19 @@ impl app::Application for AppState {
         state: event::ElementState,
         mut pt: Point2<f32>,
     ) {
-        let window_size = self.ecs.get_resource::<WindowSize>();
-        pt.y = window_size.height - pt.y;
+        let pressed = state == event::ElementState::Pressed;
+        pt.y = self.ecs.get_resource::<WindowSize>().height - pt.y;
 
         if !self.ui.on_click(button, state, pt) && button == event::MouseButton::Left {
-            let mut input_manager = self.ecs.get_resource_mut::<InputManager>();
-            input_manager.left_mb = state == event::ElementState::Pressed;
+            let input_action = {
+                let mut input_manager = self.ecs.get_resource_mut::<InputManager>();
+                input_manager.left_mb = pressed;
+                input_manager.action
+            };
+
+            if pressed {
+                input_action.on_click(&mut self.ecs);
+            }
         }
     }
 

@@ -5,7 +5,12 @@ pub use input::{InputAction, InputManager};
 pub use objects::ObjectMeshes;
 pub use physics::{Collider, ColliderShape, Hitbox, RaycastWorld, RigidBody};
 pub use ship::{BlockEntity, Ship, Tile};
-use specs::{prelude::*, shred::Fetch, storage::MaskedStorage, Component};
+use specs::{
+    prelude::*,
+    shred::{Fetch, FetchMut},
+    storage::MaskedStorage,
+    Component,
+};
 
 pub mod gameplay;
 pub mod input;
@@ -14,6 +19,7 @@ pub mod physics;
 pub mod ship;
 
 pub type SimpleStorage<'a, T> = Storage<'a, T, Fetch<'a, MaskedStorage<T>>>;
+pub type SimpleMutStorage<'a, T> = Storage<'a, T, FetchMut<'a, MaskedStorage<T>>>;
 
 pub struct Model {
     pub mesh_id: MeshId,
@@ -159,9 +165,8 @@ impl<'a> ECS<'a> {
             }
         };
 
-        let mut dispatcher_builder = DispatcherBuilder::new()
-            .with(input::CameraSystem, "camera_system", &[])
-            .with(input::InputSystem, "input_system", &["camera_system"]);
+        let mut dispatcher_builder = DispatcherBuilder::new();
+        input::setup_systems(&mut dispatcher_builder);
         dispatcher_builder.add_barrier();
         crate::block::setup_systems(&mut dispatcher_builder);
         objects::setup_systems(&mut dispatcher_builder);
@@ -213,12 +218,20 @@ impl<'a> ECS<'a> {
         self.world.maintain();
     }
 
-    pub fn get_resource_mut<T: 'static + Sync + Send>(&self) -> specs::shred::FetchMut<T> {
+    pub fn get_resource_mut<T: 'static + Sync + Send>(&self) -> FetchMut<T> {
         self.world.write_resource::<T>()
     }
 
-    pub fn get_resource<T: 'static + Sync + Send>(&self) -> specs::shred::Fetch<T> {
+    pub fn get_resource<T: 'static + Sync + Send>(&self) -> Fetch<T> {
         self.world.read_resource::<T>()
+    }
+
+    pub fn get_component_mut<T: 'static + Sync + Send + Component>(&self) -> SimpleMutStorage<T> {
+        self.world.write_component::<T>()
+    }
+
+    pub fn get_component<T: 'static + Sync + Send + Component>(&self) -> SimpleStorage<T> {
+        self.world.read_component::<T>()
     }
 }
 
@@ -285,8 +298,6 @@ impl Transform {
     }
 }
 
-/// TODO: Create seperate lines for component and GPU
-/// and then add a 'visible' flag here
 #[derive(Clone, Copy, Component)]
 #[storage(HashMapStorage)]
 pub struct Line {
