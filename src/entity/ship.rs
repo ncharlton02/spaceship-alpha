@@ -247,10 +247,7 @@ fn build_initial_ship(world: &World) -> (Vec<BuildAction>, Vec<BuildAction>) {
     ));
 
     gadgets.push(BuildAction::BuildBlock(Point2::new(0, size), blocks.laser));
-    gadgets.push(BuildAction::BuildBlock(
-        Point2::new(1, size),
-        blocks.cooler,
-    ));
+    gadgets.push(BuildAction::BuildBlock(Point2::new(1, size), blocks.cooler));
     gadgets.push(BuildAction::BuildBlock(Point2::new(1, 0), blocks.cooler));
     gadgets.push(BuildAction::BuildBlock(Point2::new(0, 0), blocks.laser));
 

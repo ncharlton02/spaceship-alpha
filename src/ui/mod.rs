@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use winit::event;
 
-mod in_game;
+pub mod in_game;
+pub mod end_game;
 mod layout;
 mod widgets;
 
@@ -120,8 +121,6 @@ impl Ui {
             event_queue: EventQueue(Vec::new()),
             assets,
         };
-
-        in_game::create_in_game_ui(&mut ui);
 
         ui
     }
@@ -328,6 +327,7 @@ pub struct UiAssets {
     pub medium_font: FontMap,
     pub pane: NinePatch,
     pub item_icons: HashMap<GameItem, TextureRegion2D>,
+    pub colin: TextureRegion2D,
 }
 
 impl UiAssets {
@@ -338,6 +338,7 @@ impl UiAssets {
             button_pressed: atlas.load_ninepatch("assets/ui/widgets/button_pressed.9.png"),
             medium_font: atlas.load_font("assets/ui/fonts/montserrat-medium.ttf"),
             pane: atlas.load_ninepatch("assets/ui/widgets/pane.9.png"),
+            colin: atlas.load_texture("assets/ui/Colin.png"),
         };
         atlas.update_gpu_texture(device, queue);
 
@@ -595,13 +596,14 @@ impl LayoutManager<'_> {
 pub trait NodeHandler {
     fn layout<'a>(
         &self,
-        _: &'a LayoutManager,
+        manager: &'a LayoutManager,
         _: NodeId,
-        _: &[NodeId],
-        _: &mut WidgetGeometries,
-        _: &mut WidgetLayouts,
-        _: &mut WidgetStates,
+        children: &[NodeId],
+        geometries: &mut WidgetGeometries,
+        layouts: &mut WidgetLayouts,
+        states: &mut WidgetStates,
     ) {
+        manager.layout_all(children, geometries, layouts, states);
     }
 
     fn on_click(

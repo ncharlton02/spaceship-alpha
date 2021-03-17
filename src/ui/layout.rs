@@ -125,12 +125,13 @@ pub enum WindowAnchor {
     TopLeft,
     TopCenter,
     BottomCenter,
+    Center,
 }
 
 impl WindowAnchor {
-    pub fn new(self, ui: &mut Ui) -> NodeId {
+    pub fn new(self, ui: &mut Ui, scene: NodeId) -> NodeId {
         ui.new_node(
-            None,
+            Some(scene),
             NodeGeometry {
                 pos: Point2::new(0.0, 0.0),
                 size: Point2::new(0.0, 0.0),
@@ -173,6 +174,10 @@ impl NodeHandler for WindowAnchor {
             Self::TopLeft => layout(|geometry, window_size| {
                 geometry.pos.x = 0.0;
                 geometry.pos.y = window_size.y - geometry.size.y;
+            }),
+            Self::Center => layout(|geometry, window_size| {
+                geometry.pos.x = (window_size.x / 2.0) - (geometry.size.x / 2.0);
+                geometry.pos.y = (window_size.y / 2.0) - (geometry.size.y / 2.0);
             }),
         }
     }
@@ -226,6 +231,20 @@ pub fn create_stack(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
         NodeLayout::default(),
         Box::new(EmptyRenderer),
         Box::new(Stack),
+        None,
+    )
+}
+
+pub fn create_scene(ui: &mut Ui) -> NodeId {
+    ui.new_node(
+        None,
+        NodeGeometry {
+            pos: Point2::new(0.0, 0.0),
+            size: Point2::new(0.0, 0.0),
+        },
+        NodeLayout::default(),
+        Box::new(EmptyRenderer),
+        Box::new(EmptyNodeHandler),
         None,
     )
 }

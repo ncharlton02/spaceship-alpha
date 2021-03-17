@@ -5,8 +5,9 @@ use cgmath::Point2;
 use entity::{InputManager, WindowSize, ECS};
 use graphics::{Camera, MeshManager, Renderer};
 use specs::prelude::*;
-use ui::{Ui, UiAssets};
+use ui::{Ui, UiAssets, NodeId};
 use winit::event;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const WIREFRAME_MODE: bool = false;
 pub const RENDER_HITBOXES: bool = false;
@@ -26,6 +27,9 @@ struct AppState {
     renderer: Renderer,
     ecs: entity::ECS<'static>,
     ui: Ui,
+    game_over: bool,
+    ui_scene: NodeId,
+    start_time: SystemTime,
 }
 
 impl app::Application for AppState {
@@ -54,10 +58,20 @@ impl app::Application for AppState {
 
         let ecs = ECS::new(device, mesh_manager, blocks, floors, camera, window_size);
         let ui_assets = UiAssets::new(device, queue, &mut renderer.ui_renderer.batch.atlas);
-        let ui = Ui::new(ui_assets);
+        let mut ui = Ui::new(ui_assets);
+        let ui_scene = ui::in_game::create_in_game_ui(&mut ui);
+        let start_time = SystemTime::now();
+
         queue.submit(None);
 
-        AppState { renderer, ecs, ui }
+        AppState {
+            renderer,
+            ecs,
+            ui,
+            ui_scene,
+            start_time,
+            game_over: false,
+        }
     }
 
     fn resize(
@@ -113,8 +127,23 @@ impl app::Application for AppState {
 
     fn fixed_update(&mut self, _: &wgpu::Device, _: &wgpu::Queue) {
         self.ui.update(&mut self.ecs);
-        self.ecs.update();
-    }
+
+        if !self.game_over {
+            self.ecs.update();
+
+            let player = self.ecs.player_ship;
+            let ship_heat = self.ecs.get_component::<entity::Ship>().get(player).unwrap().heat;
+
+            if ship_heat > entity::ship::MAX_HEAT {
+                let time_elapsed = self.start_time.elapsed().unwrap().as_secs();
+                self.game_over = true;
+                // TODO: (BUG) the main menu must be added before the old one is removed??
+                let main_menu = ui::end_game::create_end_game(&mut self.ui, time_elapsed);
+                self.ui.remove_node(self.ui_scene);
+                self.ui_scene = main_menu;
+            }
+        }
+    }   
 
     fn render(
         &mut self,
@@ -122,31 +151,32 @@ impl app::Application for AppState {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) {
-        let mut lines = Vec::new();
-        let lines_comps = self.ecs.world.read_component::<entity::Line>();
-        let entities = self.ecs.get_resource::<specs::world::EntitiesRes>();
-        let camera = self.ecs.get_resource::<Camera>();
-
-        for (line, _) in (&lines_comps, &entities).join() {
-            lines.push(*line);
-        }
-
-        let mut mesh_manager = self.ecs.get_resource_mut::<MeshManager>();
-        self.ui.render(&mut self.renderer.ui_renderer.batch);
-
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        self.renderer.render_world(
-            queue,
-            texture,
-            &mut encoder,
-            &camera,
-            &mut mesh_manager,
-            &lines,
-        );
+        if !self.game_over {
+            let mut lines = Vec::new();
+            let lines_comps = self.ecs.world.read_component::<entity::Line>();
+            let entities = self.ecs.get_resource::<specs::world::EntitiesRes>();
+            let camera = self.ecs.get_resource::<Camera>();
+            let mut mesh_manager = self.ecs.get_resource_mut::<MeshManager>();
 
-        self.renderer.render_ui(queue, texture, &mut encoder);
+            for (line, _) in (&lines_comps, &entities).join() {
+                lines.push(*line);
+            }
+
+            self.renderer.render_world(
+                queue,
+                texture,
+                &mut encoder,
+                &camera,
+                &mut mesh_manager,
+                &lines,
+            );
+        }
+
+        self.ui.render(&mut self.renderer.ui_renderer.batch);
+        self.renderer.render_ui(queue, texture, &mut encoder, self.game_over);
         queue.submit(Some(encoder.finish()));
     }
 }
@@ -157,7 +187,6 @@ fn main() {
 
 #[allow(dead_code)]
 pub fn print_time(title: &str) {
-    use std::time::{SystemTime, UNIX_EPOCH};
     let time_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")

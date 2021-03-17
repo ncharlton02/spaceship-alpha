@@ -448,15 +448,26 @@ impl Renderer {
         queue: &wgpu::Queue,
         frame: &wgpu::SwapChainTexture,
         encoder: &mut wgpu::CommandEncoder,
+        clear_screen: bool,
     ) {
         let sprites = self.ui_renderer.batch.sprites();
+        let load_op = if clear_screen {
+            wgpu::LoadOp::Clear(wgpu::Color {
+                r: 0.001,
+                g: 0.001,
+                b: 0.001,
+                a: 1.0,
+            })
+        } else {
+            wgpu::LoadOp::Load
+        };
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &self.msaa_texture.view,
                 resolve_target: Some(&frame.view),
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
+                    load: load_op,
                     store: true,
                 },
             }],

@@ -89,7 +89,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "Miner",
         Some(setup_miner),
         false,
-        Vec::with_capacity(0)
+        Vec::with_capacity(0),
     );
     let laser = create_block(
         &mut blocks,

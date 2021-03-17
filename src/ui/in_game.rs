@@ -3,11 +3,9 @@ use crate::block::Blocks;
 use crate::entity::{InputAction, InputManager};
 use crate::item::{GameItem, Inventory};
 
-// TODO: Create a container with no size so that
-// all of the elements of a scene can be deleted at
-// once
-pub fn create_in_game_ui(ui: &mut Ui) {
-    let top_left_anchor = layout::WindowAnchor::TopLeft.new(ui);
+pub fn create_in_game_ui(ui: &mut Ui) -> NodeId {
+    let scene = layout::create_scene(ui);
+    let top_left_anchor = layout::WindowAnchor::TopLeft.new(ui, scene);
     let inventory = layout::create_vbox(ui, Some(top_left_anchor), false);
 
     for item in GameItem::iter() {
@@ -33,7 +31,7 @@ pub fn create_in_game_ui(ui: &mut Ui) {
         );
     }
 
-    let top_anchor = layout::WindowAnchor::TopCenter.new(ui);
+    let top_anchor = layout::WindowAnchor::TopCenter.new(ui, scene);
     let action_label = Label::create(ui, Some(top_anchor), "Current Action: None");
     ui.set_on_update(
         action_label,
@@ -50,7 +48,7 @@ pub fn create_in_game_ui(ui: &mut Ui) {
         }),
     );
 
-    let button_stack = layout::create_vbox(ui, None, true);
+    let button_stack = layout::create_vbox(ui, Some(scene), true);
     Button::create(
         ui,
         Some(button_stack),
@@ -76,7 +74,9 @@ pub fn create_in_game_ui(ui: &mut Ui) {
         }),
     );
 
-    create_heat_bar(ui);
+    create_heat_bar(ui, scene);
+
+    scene
 }
 
 struct HeatBarState {
@@ -118,8 +118,8 @@ impl NodeRenderer for HeatBarRenderer {
     }
 }
 
-pub fn create_heat_bar(ui: &mut Ui) {
-    let bottom_center_anchor = layout::WindowAnchor::BottomCenter.new(ui);
+pub fn create_heat_bar(ui: &mut Ui, scene: NodeId) {
+    let bottom_center_anchor = layout::WindowAnchor::BottomCenter.new(ui, scene);
     let heat_bar_size = Point2::new(250.0, 50.0);
     let stack = layout::create_stack(ui, Some(bottom_center_anchor));
 

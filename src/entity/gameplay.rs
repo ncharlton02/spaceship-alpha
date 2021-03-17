@@ -68,13 +68,13 @@ impl<'a> System<'a> for AsteroidFieldSystem {
             if field.tick > 0 {
                 field.tick -= 1;
             } else {
-                let max_level = 40;
+                let max_level = 30;
                 if field.level < max_level {
                     println!("Level: {}", field.level);
                     field.level += 1;
                 }
 
-                field.tick = 200 - (field.level * 4);
+                field.tick = 200 - (field.level * 6);
 
                 let mut rng = rand::thread_rng();
                 let item = GameItem::iter().choose(&mut rng).unwrap();
