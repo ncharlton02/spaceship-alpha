@@ -22,8 +22,8 @@ pub fn init_world(world: &mut World) {
         .with(AsteroidField {
             asteroids: Vec::new(),
             tick: 0,
-            spawn_time: 200,
-            x_range: 30.0,
+            level: 1,
+            x_range: 15.0,
         })
         .build();
 }
@@ -33,7 +33,7 @@ pub fn init_world(world: &mut World) {
 struct AsteroidField {
     asteroids: Vec<Entity>,
     tick: u16,
-    spawn_time: u16,
+    level: u16,
     x_range: f32,
 }
 
@@ -68,14 +68,29 @@ impl<'a> System<'a> for AsteroidFieldSystem {
             if field.tick > 0 {
                 field.tick -= 1;
             } else {
-                field.tick = field.spawn_time;
+                let max_level = 40;
+                if field.level < max_level {
+                    println!("Level: {}", field.level);
+                    field.level += 1;
+                }
+
+                field.tick = 200 - (field.level * 4);
 
                 let mut rng = rand::thread_rng();
                 let item = GameItem::iter().choose(&mut rng).unwrap();
-                let pos_y: f32 =
-                    rng.gen_range(-5.0..5.0) + if rng.gen::<bool>() { 14.0 } else { -10.0 };
-                let mut transform =
-                    Transform::from_position(-field.x_range, pos_y, rng.gen_range(5.0..10.0));
+                let mut transform = if rng.gen_range(0..(max_level - field.level + 5)) < 4 {
+                    println!("Attack!");
+                    Transform::from_position(
+                        -field.x_range,
+                        rng.gen_range(1.0..8.0),
+                        rng.gen_range(0.0..5.0),
+                    )
+                } else {
+                    let pos_y: f32 =
+                        rng.gen_range(-3.0..3.0) + if rng.gen::<bool>() { 14.0 } else { -10.0 };
+                    Transform::from_position(-field.x_range, pos_y, rng.gen_range(6.0..9.0))
+                };
+
                 transform.set_rotation_z(rng.gen_range(0.0..crate::PI * 2.0));
                 // TODO: Hide Spawning from Camera
                 // TODO: Never Spawn collision with ship!

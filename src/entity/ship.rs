@@ -1,13 +1,17 @@
 use super::{Collider, Model, Transform};
 use crate::block::{BlockId, Blocks};
 use crate::floor::{Floor, Floors};
+use crate::item::{GameItem, Inventory, ItemStack};
 use cgmath::Point2;
 use specs::{prelude::*, world::EntitiesRes, Component};
 use std::collections::HashMap;
 
+pub const MAX_HEAT: f32 = 100.0;
+
 #[derive(Component)]
 #[storage(HashMapStorage)]
 pub struct Ship {
+    pub heat: f32,
     tiles: HashMap<Point2<i16>, Tile>,
 }
 
@@ -19,11 +23,24 @@ pub struct Tile {
 }
 
 #[derive(Component, Clone)]
-#[storage(VecStorage)]
+#[storage(DenseVecStorage)]
 pub struct BlockEntity {
     pub ship: Entity,
     pub block_id: BlockId,
     pub root: Point2<i16>,
+}
+
+#[derive(Component, Clone)]
+#[storage(DenseVecStorage)]
+pub struct GadgetEntity {
+    pub ship: Entity,
+    pub block_id: BlockId,
+}
+
+pub fn register_components(world: &mut World) {
+    world.register::<Ship>();
+    world.register::<BlockEntity>();
+    world.register::<GadgetEntity>();
 }
 
 pub enum BuildAction {
@@ -33,10 +50,16 @@ pub enum BuildAction {
     RemoveFloor(Point2<i16>),
 }
 
-pub fn execute_build_actions(world: &mut World, ship_entity: Entity, actions: &[BuildAction]) {
+pub fn execute_build_actions(
+    world: &mut World,
+    ship_entity: Entity,
+    actions: &[BuildAction],
+    ignore_price: bool,
+) {
     let lazy_update = world.fetch::<LazyUpdate>();
     let entities = world.fetch::<EntitiesRes>();
     let mut ships = world.write_component::<Ship>();
+    let mut inventory = world.fetch_mut::<Inventory>();
     let ship = ships.get_mut(ship_entity).unwrap();
     let blocks = world.fetch::<Blocks>();
     let block_entities = world.read_component::<BlockEntity>();
@@ -62,6 +85,23 @@ pub fn execute_build_actions(world: &mut World, ship_entity: Entity, actions: &[
                     continue;
                 };
 
+                if !ignore_price {
+                    if block
+                        .cost
+                        .iter()
+                        .filter(|cost| !inventory.has_enough_items(*cost))
+                        .count()
+                        > 0
+                    {
+                        break;
+                    } else {
+                        block
+                            .cost
+                            .iter()
+                            .for_each(|cost| inventory.remove(cost.item, cost.amount));
+                    }
+                }
+
                 let entity_builder = lazy_update
                     .create_entity(&entities)
                     .with(Model::new(block.mesh_id))
@@ -70,6 +110,10 @@ pub fn execute_build_actions(world: &mut World, ship_entity: Entity, actions: &[
                         pos.y as f32,
                         base.height,
                     ))
+                    .with(GadgetEntity {
+                        ship: ship_entity,
+                        block_id: *block_id,
+                    })
                     .with(Collider::new(
                         block.hitbox.clone(),
                         Collider::SHIP,
@@ -135,7 +179,7 @@ pub fn execute_build_actions(world: &mut World, ship_entity: Entity, actions: &[
     }
 }
 
-pub fn create_ship(world: &mut World) {
+pub fn create_ship(world: &mut World) -> Entity {
     let mut tiles = HashMap::new();
     let initial_size = 32;
     for x in -initial_size..initial_size {
@@ -151,19 +195,24 @@ pub fn create_ship(world: &mut World) {
         }
     }
 
-    let ship = world.create_entity().with(Ship { tiles }).build();
+    let ship = world
+        .create_entity()
+        .with(Ship { tiles, heat: 0.0 })
+        .build();
     let (ship_build_actions, ship_build_gadgets) = build_initial_ship(&world);
 
-    execute_build_actions(world, ship, &ship_build_actions);
+    execute_build_actions(world, ship, &ship_build_actions, true);
     // execute_build_actions adds the entities lazily, so we need to maintain the world
     // in order to add the block entities
+    // TODO: This could cause a bug, because entities are not properly cleaned up with world.maintain()
     world.maintain();
-    execute_build_actions(world, ship, &ship_build_gadgets);
+    execute_build_actions(world, ship, &ship_build_gadgets, true);
+    ship
 }
 
 fn build_initial_ship(world: &World) -> (Vec<BuildAction>, Vec<BuildAction>) {
     let blocks = world.fetch::<Blocks>();
-    let floors = world.fetch::<Floors>();
+    let metal_floor = world.fetch::<Floors>().metal;
 
     let mut ship = Vec::new();
     let mut gadgets = Vec::new();
@@ -173,10 +222,8 @@ fn build_initial_ship(world: &World) -> (Vec<BuildAction>, Vec<BuildAction>) {
         for y in 0..=size {
             if x == 0 || y == 0 || x == size || y == size {
                 ship.push(BuildAction::BuildBlock(Point2::new(x, y), blocks.wall));
-            } else if x == 3 && y == 3 {
-                ship.push(BuildAction::BuildFloor(Point2::new(3, 3), floors.dirt));
             } else {
-                ship.push(BuildAction::BuildFloor(Point2::new(x, y), floors.metal));
+                ship.push(BuildAction::BuildFloor(Point2::new(x, y), metal_floor));
             }
         }
     }
@@ -198,12 +245,13 @@ fn build_initial_ship(world: &World) -> (Vec<BuildAction>, Vec<BuildAction>) {
         Point2::new(size, size + 2),
         blocks.cube,
     ));
-    ship.push(BuildAction::BuildBlock(
-        Point2::new(-1, size / 2),
-        blocks.miner,
-    ));
 
-    gadgets.push(BuildAction::BuildBlock(Point2::new(-5, 5), blocks.laser));
+    gadgets.push(BuildAction::BuildBlock(Point2::new(0, size), blocks.laser));
+    gadgets.push(BuildAction::BuildBlock(
+        Point2::new(1, size),
+        blocks.cooler,
+    ));
+    gadgets.push(BuildAction::BuildBlock(Point2::new(1, 0), blocks.cooler));
     gadgets.push(BuildAction::BuildBlock(Point2::new(0, 0), blocks.laser));
 
     (ship, gadgets)

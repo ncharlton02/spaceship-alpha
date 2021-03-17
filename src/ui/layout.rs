@@ -124,6 +124,7 @@ pub enum WindowAnchor {
     // TODO: Add the rest of the variants
     TopLeft,
     TopCenter,
+    BottomCenter,
 }
 
 impl WindowAnchor {
@@ -165,10 +166,66 @@ impl NodeHandler for WindowAnchor {
                 geometry.pos.x = (window_size.x / 2.0) - (geometry.size.x / 2.0);
                 geometry.pos.y = window_size.y - geometry.size.y;
             }),
+            Self::BottomCenter => layout(|geometry, window_size| {
+                geometry.pos.x = (window_size.x / 2.0) - (geometry.size.x / 2.0);
+                geometry.pos.y = 0.0;
+            }),
             Self::TopLeft => layout(|geometry, window_size| {
                 geometry.pos.x = 0.0;
                 geometry.pos.y = window_size.y - geometry.size.y;
             }),
         }
     }
+}
+
+struct Stack;
+
+impl NodeHandler for Stack {
+    fn layout<'a>(
+        &self,
+        layout_manager: &'a LayoutManager,
+        node: NodeId,
+        children: &[NodeId],
+        geometries: &mut WidgetGeometries,
+        layouts: &mut WidgetLayouts,
+        states: &mut WidgetStates,
+    ) {
+        let mut width: f32 = 0.0;
+        let mut height: f32 = 0.0;
+
+        layout_manager.layout_all(children, geometries, layouts, states);
+
+        for child in children {
+            let min_size = layouts.get(child.index()).unwrap().min_size;
+            width = width.max(min_size.x);
+            height = height.max(min_size.y);
+        }
+
+        let mut pos = geometries[node.arena_index()].pos;
+        for child in children {
+            let geometry = &mut geometries[child.arena_index()];
+            geometry.pos.x = pos.x;
+            geometry.pos.y = pos.y;
+            geometry.size.x = width;
+            geometry.size.y = height;
+        }
+
+        let size = Point2::new(width, height);
+        layouts[node.index()].min_size = size;
+        geometries[node.arena_index()].size = size;
+    }
+}
+
+pub fn create_stack(ui: &mut Ui, parent: Option<NodeId>) -> NodeId {
+    ui.new_node(
+        parent,
+        NodeGeometry {
+            pos: Point2::new(0.0, 0.0),
+            size: Point2::new(0.0, 0.0),
+        },
+        NodeLayout::default(),
+        Box::new(EmptyRenderer),
+        Box::new(Stack),
+        None,
+    )
 }

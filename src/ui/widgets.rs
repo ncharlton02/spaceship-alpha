@@ -132,12 +132,19 @@ impl Label {
     }
 
     pub fn update_text(ui: &mut Ui, node: NodeId, text: &str) {
-        let (text, min_size) = new_text_layout(ui, text, LABEL_PADDING);
+        let (mut new_text, min_size) = new_text_layout(ui, text, LABEL_PADDING);
 
         ui.layouts[node.index()].min_size = min_size;
         ui.geometries[node.arena_index()].size = min_size;
         let state = ui.states.get_mut::<Label>(node).unwrap();
-        *state.text.borrow_mut() = text;
+        let mut text = state.text.borrow_mut();
+        new_text.color = text.color;
+        *text = new_text;
+    }
+
+    pub fn set_color(ui: &mut Ui, node: NodeId, color: Color) {
+        let state = ui.states.get_mut::<Label>(node).unwrap();
+        state.text.borrow_mut().color = color;
     }
 }
 

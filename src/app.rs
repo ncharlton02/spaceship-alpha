@@ -135,17 +135,32 @@ fn start<App: Application>(
     let mut app = App::init(&sc_desc, &device, &queue);
     let mut last_update_inst = Instant::now();
     let mut mouse_pos: Point2<f32> = Point2::new(0.0, 0.0);
-    let fps = 60;
+
+    let frame_time = 1_000_000_000u128 / 60;
+    let mut last_frame = get_time_nano();
 
     event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
         let _ = (&instance, &adapter); // force ownership by the closure
         match event {
-            event::Event::MainEventsCleared => {
-                if last_update_inst.elapsed() > Duration::from_nanos(1_000_000_000 / fps) {
+            event::Event::MainEventsCleared | event::Event::RedrawRequested(_) => {
+                //TODO: Change this to while to gaurentee its happening every loop
+                while last_frame + frame_time <= get_time_nano() {
+                    last_frame = get_time_nano();
                     app.fixed_update(&device, &queue);
-                    last_update_inst = Instant::now();
                 }
-                window.request_redraw();
+                let frame = match swap_chain.get_current_frame() {
+                    Ok(frame) => frame,
+                    Err(_) => {
+                        swap_chain = device.create_swap_chain(&surface, &sc_desc);
+                        swap_chain
+                            .get_current_frame()
+                            .expect("Failed to acquire next swap chain texture!")
+                    }
+                };
+
+                app.render(&frame.output, &device, &queue);
             }
             event::Event::WindowEvent {
                 event: WindowEvent::Resized(size),
@@ -186,22 +201,16 @@ fn start<App: Application>(
                 }
                 _ => {}
             },
-            event::Event::RedrawRequested(_) => {
-                let frame = match swap_chain.get_current_frame() {
-                    Ok(frame) => frame,
-                    Err(_) => {
-                        swap_chain = device.create_swap_chain(&surface, &sc_desc);
-                        swap_chain
-                            .get_current_frame()
-                            .expect("Failed to acquire next swap chain texture!")
-                    }
-                };
-
-                app.render(&frame.output, &device, &queue);
-            }
             _ => {}
         }
     });
+}
+
+fn get_time_nano() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos()
 }
 
 pub fn run<App: Application>(title: &str) {

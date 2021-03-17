@@ -1,8 +1,10 @@
 use crate::entity::{
     objects::{self, Health, ObjectMeshes},
+    ship::{GadgetEntity, Ship},
     ColliderShape, Hitbox, InputAction, InputManager, Line, RaycastWorld, Transform,
 };
 use crate::graphics::{self, Mesh, MeshId, MeshManager};
+use crate::item::{GameItem, ItemStack};
 use cgmath::{Point2, Vector3};
 use specs::{prelude::*, world::LazyBuilder, Component};
 
@@ -20,6 +22,7 @@ pub struct Block {
     pub hitbox: Hitbox,
     pub setup: Option<OnBlockSetup>,
     pub is_gadget: bool,
+    pub cost: Vec<ItemStack>,
 }
 
 pub struct Blocks {
@@ -29,6 +32,7 @@ pub struct Blocks {
     pub cube: BlockId,
     pub miner: BlockId,
     pub laser: BlockId,
+    pub cooler: BlockId,
 }
 
 impl Blocks {
@@ -55,6 +59,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "wall",
         None,
         false,
+        Vec::with_capacity(0),
     );
     let engine = create_block(
         &mut blocks,
@@ -64,6 +69,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "engine",
         None,
         false,
+        Vec::with_capacity(0),
     );
     let cube = create_block(
         &mut blocks,
@@ -73,6 +79,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "Box",
         None,
         false,
+        Vec::with_capacity(0),
     );
     let miner = create_block(
         &mut blocks,
@@ -82,6 +89,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "Miner",
         Some(setup_miner),
         false,
+        Vec::with_capacity(0)
     );
     let laser = create_block(
         &mut blocks,
@@ -94,6 +102,20 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         "Laser",
         Some(setup_laser),
         true,
+        vec![GameItem::Iron.stack(15), GameItem::Copper.stack(15)],
+    );
+    let cooler = create_block(
+        &mut blocks,
+        register_mesh(&graphics::load_mesh("cooler")),
+        (1, 1, 0.2),
+        Some(Hitbox::new(
+            ColliderShape::Cuboid(Vector3::new(0.6, 0.6, 0.2)),
+            Vector3::new(0.0, 0.0, 0.525 / 2.0),
+        )),
+        "Cooler",
+        Some(setup_cooler),
+        true,
+        vec![GameItem::Iron.stack(10), GameItem::Copper.stack(10)],
     );
 
     Blocks {
@@ -103,6 +125,7 @@ pub fn load_blocks(device: &wgpu::Device, mesh_manager: &mut MeshManager) -> Blo
         cube,
         miner,
         laser,
+        cooler,
     }
 }
 
@@ -114,6 +137,7 @@ fn create_block(
     type_name: &'static str,
     setup: Option<OnBlockSetup>,
     is_gadget: bool,
+    cost: Vec<ItemStack>,
 ) -> BlockId {
     let id = blocks.len();
     let block = Block {
@@ -122,6 +146,7 @@ fn create_block(
         type_name,
         setup,
         is_gadget,
+        cost,
         hitbox: hitbox.unwrap_or(Hitbox::new(
             ColliderShape::Cuboid(Vector3::new(size.0 as f32, size.1 as f32, size.2)),
             Vector3::new(0.0, 0.0, size.2 / 2.0),
@@ -138,11 +163,13 @@ fn create_block(
 pub fn register_components(world: &mut World) {
     world.register::<Miner>();
     world.register::<Laser>();
+    world.register::<Cooler>();
 }
 
 pub fn setup_systems(dispatcher: &mut DispatcherBuilder) {
     dispatcher.add(MinerSystem, "", &[]);
     dispatcher.add(LaserSystem, "", &[]);
+    dispatcher.add(CoolerSystem, "", &[]);
 }
 
 fn setup_miner(builder: LazyBuilder) -> LazyBuilder {
@@ -208,6 +235,8 @@ impl<'a> System<'a> for LaserSystem {
         Entities<'a>,
         ReadExpect<'a, InputManager>,
         ReadExpect<'a, RaycastWorld>,
+        ReadStorage<'a, GadgetEntity>,
+        WriteStorage<'a, Ship>,
         WriteStorage<'a, Laser>,
         WriteStorage<'a, Line>,
         WriteStorage<'a, Health>,
@@ -215,7 +244,17 @@ impl<'a> System<'a> for LaserSystem {
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, input, raycaster, lasers, mut lines, mut healths, mut transforms) = data;
+        let (
+            entities,
+            input,
+            raycaster,
+            gadget_entities,
+            mut ships,
+            lasers,
+            mut lines,
+            mut healths,
+            mut transforms,
+        ) = data;
 
         if input.action != InputAction::Laser {
             return;
@@ -232,7 +271,8 @@ impl<'a> System<'a> for LaserSystem {
 
                 let raycast = raycaster.raycast(Vec::with_capacity(0), start_pos, target_pos);
 
-                if Some(target) == raycast {
+                // TODO: FIX RAYCASTING IN THE FUTURE
+                if Some(target) == raycast || true {
                     transform.set_rotation_z(angle_xy);
 
                     lines
@@ -246,6 +286,13 @@ impl<'a> System<'a> for LaserSystem {
                         )
                         .expect("Unable to set line component for laser!");
 
+                    if let Some(ship) = gadget_entities
+                        .get(entity)
+                        .and_then(|block| ships.get_mut(block.ship))
+                    {
+                        ship.heat += 0.3;
+                    }
+
                     if let Some(health) = healths.get_mut(target) {
                         health.damage(1);
                     }
@@ -255,6 +302,44 @@ impl<'a> System<'a> for LaserSystem {
             }
 
             lines.remove(entity);
+        }
+    }
+}
+
+fn setup_cooler(builder: LazyBuilder) -> LazyBuilder {
+    builder.with(Cooler)
+}
+
+#[derive(Component)]
+#[storage(HashMapStorage)]
+pub struct Cooler;
+
+pub struct CoolerSystem;
+
+impl<'a> System<'a> for CoolerSystem {
+    type SystemData = (
+        Entities<'a>,
+        ReadStorage<'a, GadgetEntity>,
+        WriteStorage<'a, Ship>,
+        ReadStorage<'a, Cooler>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (entities, gadget_entities, mut ships, coolers) = data;
+        let cool_rate = 0.13f32;
+
+        for (entity, _) in (&entities, &coolers).join() {
+            if let Some(ship) = gadget_entities
+                .get(entity)
+                .and_then(|block| ships.get_mut(block.ship))
+                .filter(|ship| ship.heat > 0.0)
+            {
+                if ship.heat < cool_rate {
+                    ship.heat = 0.0;
+                } else {
+                    ship.heat -= cool_rate;
+                }
+            }
         }
     }
 }

@@ -87,7 +87,7 @@ pub struct Asteroid(pub GameItem);
 impl Asteroid {
     pub const HEALTH: u32 = 180;
     pub const COLLIDER_RADIUS: f32 = 0.8;
-    pub const VELOCITY: f32 = 1.3;
+    pub const VELOCITY: f32 = 1.0;
 }
 
 pub struct AsteroidShrinkSystem;
@@ -125,7 +125,7 @@ impl<'a> System<'a> for AsteroidMinedSystem {
         for (_, asteroid, health) in (to_be_removed.bitset(), &asteroids, &healths).join() {
             if health.health() == 0 {
                 // Need to make sure it was actually mined (and not just removed)
-                inventory.change_amount(asteroid.0, 5);
+                inventory.add(asteroid.0, 5);
             }
         }
     }

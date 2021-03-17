@@ -11,24 +11,21 @@ use winit::event;
 pub enum InputAction {
     Mining,
     Laser,
-    Build,
+    Build(BlockId),
     None,
 }
 
 impl InputAction {
     pub fn on_click(&self, ecs: &mut ECS) {
         match self {
-            Self::Build => {
-                let (block_entity, laser) = {
+            Self::Build(block_id) => {
+                let block_entity = {
                     let input_manager = ecs.get_resource::<InputManager>();
-                    let laser = ecs.get_resource::<Blocks>().laser;
                     let block_entities = ecs.get_component::<BlockEntity>();
-                    let block_entity = input_manager
+                    input_manager
                         .target
                         .and_then(|entity| block_entities.get(entity))
-                        .map(|x| x.clone());
-
-                    (block_entity, laser)
+                        .map(|x| x.clone())
                 };
 
                 if let Some(block_entity) = block_entity {
@@ -38,13 +35,24 @@ impl InputAction {
                     ship::execute_build_actions(
                         &mut ecs.world,
                         ship,
-                        &[BuildAction::BuildBlock(pos, laser)],
+                        &[BuildAction::BuildBlock(pos, *block_id)],
+                        false,
                     );
-
-                    println!("Build Block!");
                 }
             }
             _ => {}
+        }
+    }
+
+    pub fn display_name(&self, ecs: &ECS) -> String {
+        match self {
+            InputAction::Build(block_id) => {
+                let blocks = ecs.get_resource::<Blocks>();
+                let block = blocks.get_block(*block_id);
+
+                format!("Build {}", block.type_name)
+            }
+            _ => format!("{:?}", self),
         }
     }
 }
@@ -97,7 +105,7 @@ pub fn setup_systems(builder: &mut DispatcherBuilder) {
     // TODO - There should be a way to automatically change
     // the rendering system based on the current input action
     builder.add(
-        BuildRenderSystem(None),
+        BuildRenderSystem(None, None),
         "build_render_system",
         &["input_system"],
     );
@@ -110,8 +118,8 @@ impl<'a> System<'a> for CameraSystem {
 
     fn run(&mut self, data: Self::SystemData) {
         let (input, mut camera) = data;
-        let rotate_speed = 0.02;
-        let move_speed = 0.16;
+        let rotate_speed = 0.015;
+        let move_speed = 0.12;
 
         if input.keys.is_key_down(event::VirtualKeyCode::Q) {
             camera.yaw += rotate_speed;
@@ -165,14 +173,14 @@ impl<'a> System<'a> for InputSystem {
 
         input.target = match input.action {
             InputAction::Mining | InputAction::Laser => Some(vec![Collider::ASTEROID]),
-            InputAction::Build => Some(vec![Collider::SHIP]),
+            InputAction::Build(_) => Some(vec![Collider::SHIP]),
             _ => None,
         }
         .and_then(|collider| raycaster.raycast(collider, near, far));
     }
 }
 
-pub struct BuildRenderSystem(Option<Entity>);
+pub struct BuildRenderSystem(Option<Entity>, Option<BlockId>);
 
 impl<'a> System<'a> for BuildRenderSystem {
     type SystemData = (
@@ -197,7 +205,8 @@ impl<'a> System<'a> for BuildRenderSystem {
         ) = data;
 
         let create_transform = |target: Option<Entity>| {
-            if let Some(block_entity) = target.and_then(|target| block_entities.get(target).clone()) {
+            if let Some(block_entity) = target.and_then(|target| block_entities.get(target).clone())
+            {
                 let block = blocks.get_block(block_entity.block_id);
 
                 let mut transform = Transform::from_position(
@@ -216,18 +225,25 @@ impl<'a> System<'a> for BuildRenderSystem {
         };
 
         match input_manager.action {
-            InputAction::Build if self.0.is_none() => {
+            InputAction::Build(block_id) if self.0.is_none() => {
                 let transform = create_transform(input_manager.target);
 
                 self.0 = Some(
                     lazy_update
                         .create_entity(&entities)
                         .with(transform)
-                        .with(Model::new(blocks.get_block(blocks.laser).mesh_id))
+                        .with(Model::new(blocks.get_block(block_id).mesh_id))
                         .build(),
                 );
+                self.1 = Some(block_id);
             }
-            InputAction::Build => {
+            InputAction::Build(block_id) if self.1.is_some() && self.1 != Some(block_id) => {
+                // TODO: (Cleanup) This block is a copy of the None block :(
+                to_be_removed.add(self.0.unwrap());
+                self.0 = None;
+                self.1 = None;
+            }
+            InputAction::Build(_) => {
                 if let Some(transform) = transforms.get_mut(self.0.unwrap()) {
                     *transform = create_transform(input_manager.target);
                 }
@@ -236,6 +252,7 @@ impl<'a> System<'a> for BuildRenderSystem {
                 // Remove Entity
                 to_be_removed.add(self.0.unwrap());
                 self.0 = None;
+                self.1 = None;
             }
             _ => {}
         }

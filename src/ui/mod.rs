@@ -304,6 +304,14 @@ impl Ui {
             panic!("Invalid Id({:?}): {}", id, desc);
         }
     }
+
+    pub fn states_mut(&mut self) -> &mut WidgetStates {
+        &mut self.states
+    }
+
+    pub fn states(&mut self) -> &WidgetStates {
+        &self.states
+    }
 }
 
 pub fn insert_or_replace<T>(vec: &mut Vec<T>, id: NodeId, item: T) {
@@ -394,11 +402,7 @@ impl NodeRenderer for SpriteRenderer {
             geometry.size.x * self.scale.x,
             geometry.size.y * self.scale.y,
         );
-        ui_batch.draw(
-            pos,
-            self.texture,
-            Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a),
-        );
+        ui_batch.draw(pos, self.texture, self.color.as_vec4());
     }
 }
 
@@ -422,7 +426,7 @@ impl NodeRenderer for NinepatchRenderer {
         let y = geometry.pos.y + self.offset.y;
         let width = geometry.size.x * self.scale.x;
         let height = geometry.size.y * self.scale.y;
-        let color = Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a);
+        let color = self.color.as_vec4();
         let patch = self.patch;
 
         let bottom_left_pos =
@@ -542,7 +546,7 @@ impl NodeRenderer for TextLayout {
         geometry: &NodeGeometry,
         _: &WidgetStates,
     ) {
-        let color = Vector4::new(self.color.r, self.color.g, self.color.b, self.color.a);
+        let color = self.color.as_vec4();
         let pos_x = geometry.pos.x + self.offset.x;
         let pos_y = geometry.pos.y + self.offset.y;
 
@@ -644,4 +648,16 @@ impl Color {
         b: 0.0,
         a: 1.0,
     };
+
+    #[allow(dead_code)]
+    pub const RED: Self = Self {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+
+    pub fn as_vec4(&self) -> Vector4<f32> {
+        Vector4::new(self.r, self.g, self.b, self.a)
+    }
 }

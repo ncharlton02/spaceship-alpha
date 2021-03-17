@@ -55,7 +55,8 @@ impl UiRenderer {
             flags: wgpu::ShaderFlags::VALIDATION,
         });
 
-        let texture_atlas = TextureAtlas::new(device);
+        let mut texture_atlas = TextureAtlas::new(device);
+        let dot = texture_atlas.load_texture("assets/ui/widgets/dot.png");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("UI Pipeline Layout"),
             bind_group_layouts: &[&camera.bind_group_layout, &texture_atlas.bg_layout],
@@ -111,7 +112,11 @@ impl UiRenderer {
                 }],
             }),
         });
-        let batch = UiBatch::new(texture_atlas);
+        let batch = UiBatch {
+            atlas: texture_atlas,
+            sprites: Vec::new(),
+            dot,
+        };
 
         Self {
             pipeline,
@@ -186,17 +191,11 @@ impl UiCamera {
 
 pub struct UiBatch {
     pub atlas: TextureAtlas,
+    dot: TextureRegion2D,
     sprites: Vec<GPUSprite>,
 }
 
 impl UiBatch {
-    fn new(atlas: TextureAtlas) -> Self {
-        Self {
-            atlas,
-            sprites: Vec::new(),
-        }
-    }
-
     pub fn reset(&mut self) {
         self.sprites.clear();
     }
@@ -214,6 +213,10 @@ impl UiBatch {
                 ),
             });
         }
+    }
+
+    pub fn rect(&mut self, pos: Vector4<f32>, color: Vector4<f32>) {
+        self.draw(pos, self.dot, color);
     }
 
     pub fn sprites(&self) -> &[GPUSprite] {

@@ -114,6 +114,7 @@ impl<'a> System<'a> for RemoveModelSystem {
 
 pub struct ECS<'a> {
     pub world: World,
+    pub player_ship: Entity,
     dispatcher: Dispatcher<'a, 'a>,
     death_dispatcher: Dispatcher<'a, 'a>,
 }
@@ -133,8 +134,6 @@ impl<'a> ECS<'a> {
 
         let mut world = World::new();
         world.register::<Model>();
-        world.register::<Ship>();
-        world.register::<BlockEntity>();
         world.register::<Transform>();
         world.register::<RigidBody>();
         world.register::<Collider>();
@@ -152,6 +151,7 @@ impl<'a> ECS<'a> {
         world.insert(InputManager::new());
         objects::register_components(&mut world);
         gameplay::register_components(&mut world);
+        ship::register_components(&mut world);
         crate::block::register_components(&mut world);
 
         let model_update_system = {
@@ -188,11 +188,12 @@ impl<'a> ECS<'a> {
             .with(physics::RemoveRaycastColliderSystem, "", &[])
             .build();
 
-        ship::create_ship(&mut world);
+        let player_ship = ship::create_ship(&mut world);
         gameplay::init_world(&mut world);
 
         ECS {
             world,
+            player_ship,
             dispatcher,
             death_dispatcher,
         }

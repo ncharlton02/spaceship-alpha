@@ -33,6 +33,7 @@ impl<'a> System<'a> for PhysicsSystem {
         ReadStorage<'a, super::BlockEntity>,
         ReadStorage<'a, super::objects::Asteroid>,
         ReadStorage<'a, super::objects::MiningMissle>,
+        WriteStorage<'a, super::Ship>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
@@ -45,6 +46,7 @@ impl<'a> System<'a> for PhysicsSystem {
             blocks,
             asteroids,
             missles,
+            mut ships,
         ) = data;
         let mut world: CollisionWorld<f32, Entity> = CollisionWorld::new(0.02);
         let dt = 1.0 / 60.0;
@@ -91,6 +93,15 @@ impl<'a> System<'a> for PhysicsSystem {
                         } else if asteroids.contains(entity2) {
                             to_be_removed.add(entity2);
                         }
+
+                        let block_entity = if blocks.contains(entity1) {
+                            entity1
+                        } else {
+                            entity2
+                        };
+                        let ship_entity = blocks.get(block_entity).unwrap().ship;
+                        let ship = ships.get_mut(ship_entity).unwrap();
+                        ship.heat += 20.0;
                     }
 
                     if has_component(entity1, entity2, &missles)
